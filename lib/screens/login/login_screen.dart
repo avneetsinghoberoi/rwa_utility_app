@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:rms_app/screens/user/dashboard.dart';
 import 'package:rms_app/screens/admin/admin_dashboard.dart';
+import 'package:rms_app/screens/user/user_home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -54,8 +55,11 @@ class _LoginScreenState extends State<LoginScreen> {
       } else {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const Dashboard()),
+          MaterialPageRoute(
+            builder: (_) => UserHomeScreen(userData: userData),
+          ),
         );
+
       }
 
     } on FirebaseAuthException catch (e) {

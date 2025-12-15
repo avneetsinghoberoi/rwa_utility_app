@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 import 'package:rms_app/screens/login/login_screen.dart';
 
 class AdminNoticesScreen extends StatefulWidget {
@@ -9,55 +11,14 @@ class AdminNoticesScreen extends StatefulWidget {
 }
 
 class _AdminNoticesScreenState extends State<AdminNoticesScreen> {
-  final List<Map<String, dynamic>> notices = [
-    {
-      "title": "Diwali Festival Celebration",
-      "description":
-      "Join us for Diwali celebrations on October 31st at the community hall. Cultural programs and dinner will be organized.",
-      "type": "Event",
-      "icon": Icons.notifications_active_outlined,
-      "color": Colors.blue,
-      "postedBy": "Admin",
-      "date": "22/10/2025",
-      "id": "ANN001",
-    },
-    {
-      "title": "Water Supply Disruption",
-      "description":
-      "Please note water supply will be disrupted tomorrow between 9 AM to 1 PM due to maintenance.",
-      "type": "Urgent",
-      "icon": Icons.error_outline,
-      "color": Colors.red,
-      "postedBy": "Admin",
-      "date": "21/10/2025",
-      "id": "ANN002",
-    },
-    {
-      "title": "Monthly Meeting Notice",
-      "description":
-      "The monthly residents' meeting will be held on October 28th at 6 PM in the community hall. All residents are requested to attend.",
-      "type": "General",
-      "icon": Icons.info_outline,
-      "color": Colors.grey,
-      "postedBy": "Admin",
-      "date": "20/10/2025",
-      "id": "ANN003",
-    },
-    {
-      "title": "Lift Maintenance Completed",
-      "description":
-      "The annual maintenance of all lifts has been completed successfully. All lifts are now operational.",
-      "type": "Maintenance",
-      "icon": Icons.check_circle_outline,
-      "color": Colors.green,
-      "postedBy": "Admin",
-      "date": "18/10/2025",
-      "id": "ANN004",
-    },
-  ];
+  // Firestore stream for live notices
+  final Stream<QuerySnapshot> _noticesStream = FirebaseFirestore.instance
+      .collection('notices')
+      .orderBy('created_at', descending: true)
+      .snapshots();
 
   void _openNewAnnouncementDialog() async {
-    final newAnnouncement = await showModalBottomSheet<Map<String, dynamic>>(
+    await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
@@ -66,12 +27,6 @@ class _AdminNoticesScreenState extends State<AdminNoticesScreen> {
       ),
       builder: (context) => const NewAnnouncementDialog(),
     );
-
-    if (newAnnouncement != null) {
-      setState(() {
-        notices.insert(0, newAnnouncement);
-      });
-    }
   }
 
   @override
@@ -97,110 +52,88 @@ class _AdminNoticesScreenState extends State<AdminNoticesScreen> {
         ],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _summaryCard("General", "2", "General notices", Icons.info_outline,
-                  Colors.grey),
-              const SizedBox(height: 12),
-              _summaryCard("Urgent", "1", "Important alerts",
-                  Icons.warning_amber_rounded, Colors.red),
-              const SizedBox(height: 12),
-              _summaryCard("Events", "1", "Community events",
-                  Icons.notifications_none, Colors.blue),
-              const SizedBox(height: 24),
-              const Divider(),
-              const SizedBox(height: 10),
+        child: StreamBuilder<QuerySnapshot>(
+          stream: _noticesStream,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+              return const Center(
+                  child: Text("No notices posted yet.",
+                      style: TextStyle(color: Colors.grey)));
+            }
 
-              // Header Row (fixed width-safe)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            final notices = snapshot.data!.docs;
+
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
                 children: [
-                  const Flexible(
-                    fit: FlexFit.loose,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text("Announcements",
-                            style: TextStyle(
-                                fontSize: 18, fontWeight: FontWeight.bold)),
-                        SizedBox(height: 4),
-                        Text("Post and manage community announcements",
-                            style: TextStyle(color: Colors.grey)),
-                      ],
-                    ),
-                  ),
-                  Flexible(
-                    fit: FlexFit.loose,
-                    child: ElevatedButton.icon(
-                      onPressed: _openNewAnnouncementDialog,
-                      icon: const Icon(Icons.add),
-                      label: const Text("New Announcement"),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.black,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 10),
+                  // Header section
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text("Announcements",
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold)),
+                      ElevatedButton.icon(
+                        onPressed: _openNewAnnouncementDialog,
+                        icon: const Icon(Icons.add),
+                        label: const Text("New Announcement"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.black,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
                       ),
-                    ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // List of notices
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: notices.length,
+                    itemBuilder: (context, index) {
+                      final data =
+                      notices[index].data() as Map<String, dynamic>;
+                      return _noticeCard(data);
+                    },
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-
-              // Notices List (scroll-safe)
-              ListView.builder(
-                itemCount: notices.length,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemBuilder: (context, index) =>
-                    _noticeCard(notices[index]),
-              ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _summaryCard(String title, String count, String subtitle,
-      IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(color: Colors.black12, blurRadius: 3, spreadRadius: 1)
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title,
-                  style: const TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
-              Text(count,
-                  style: const TextStyle(
-                      fontSize: 22, fontWeight: FontWeight.bold)),
-              Text(subtitle, style: const TextStyle(color: Colors.grey)),
-            ],
-          ),
-          Icon(icon, size: 26, color: color),
-        ],
-      ),
-    );
-  }
-
   Widget _noticeCard(Map<String, dynamic> n) {
+    Color color;
+    IconData icon;
+
+    switch (n["type"]) {
+      case "Urgent":
+        color = Colors.red;
+        icon = Icons.warning_amber_rounded;
+        break;
+      case "Event":
+        color = Colors.blue;
+        icon = Icons.event;
+        break;
+      case "Maintenance":
+        color = Colors.green;
+        icon = Icons.build_circle_outlined;
+        break;
+      default:
+        color = Colors.grey;
+        icon = Icons.info_outline;
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(14),
@@ -219,28 +152,25 @@ class _AdminNoticesScreenState extends State<AdminNoticesScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(
-                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(n["icon"], color: n["color"], size: 22),
+                  Icon(icon, color: color, size: 22),
                   const SizedBox(width: 6),
-                  Text(n["title"],
+                  Text(n["title"] ?? "",
                       style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          height: 1.3)),
+                          fontSize: 16, fontWeight: FontWeight.bold)),
                 ],
               ),
               Container(
                 padding:
                 const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: n["color"].withOpacity(0.1),
+                  color: color.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  n["type"],
+                  n["type"] ?? "",
                   style: TextStyle(
-                      color: n["color"],
+                      color: color,
                       fontWeight: FontWeight.w600,
                       fontSize: 12),
                 ),
@@ -248,21 +178,18 @@ class _AdminNoticesScreenState extends State<AdminNoticesScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          Text(n["description"],
+          Text(n["description"] ?? "",
               style: const TextStyle(color: Colors.black87)),
           const SizedBox(height: 10),
-
           Row(
             children: [
-              Text("Posted by ${n["postedBy"]}",
+              Text("Posted by ${n["posted_by"] ?? "Admin"}",
                   style: const TextStyle(fontWeight: FontWeight.w500)),
               const SizedBox(width: 6),
               const Text("•"),
               const SizedBox(width: 6),
-              Text(n["date"], style: const TextStyle(color: Colors.black54)),
-              const Spacer(),
-              Text("ID: ${n["id"]}",
-                  style: const TextStyle(color: Colors.black54, fontSize: 12)),
+              Text(n["date"] ?? "",
+                  style: const TextStyle(color: Colors.black54)),
             ],
           ),
         ],
@@ -271,7 +198,7 @@ class _AdminNoticesScreenState extends State<AdminNoticesScreen> {
   }
 }
 
-// -------------------- ADD ANNOUNCEMENT DIALOG --------------------
+// -------------------- NEW ANNOUNCEMENT DIALOG --------------------
 
 class NewAnnouncementDialog extends StatefulWidget {
   const NewAnnouncementDialog({super.key});
@@ -282,10 +209,49 @@ class NewAnnouncementDialog extends StatefulWidget {
 
 class _NewAnnouncementDialogState extends State<NewAnnouncementDialog> {
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController titleController = TextEditingController();
-  final TextEditingController descController = TextEditingController();
+  final titleController = TextEditingController();
+  final descController = TextEditingController();
   String? selectedType;
   final List<String> types = ["General", "Urgent", "Event", "Maintenance"];
+  bool isSubmitting = false;
+
+  Future<void> _submitNotice() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => isSubmitting = true);
+
+    final newNotice = {
+      'title': titleController.text.trim(),
+      'description': descController.text.trim(),
+      'type': selectedType ?? "General",
+      'posted_by': "A001", // or current admin ID
+      'date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
+      'created_at': FieldValue.serverTimestamp(),
+    };
+
+    try {
+      await FirebaseFirestore.instance.collection('notices').add(newNotice);
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Notice posted successfully!"),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      print("Error posting notice: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Failed to post notice"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => isSubmitting = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -305,24 +271,23 @@ class _NewAnnouncementDialogState extends State<NewAnnouncementDialog> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text("Add New Announcement",
-                      style:
-                      TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold)),
                   IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close_rounded))
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
                 ],
               ),
               const Text("Enter details to post a new community notice",
                   style: TextStyle(color: Colors.grey)),
               const SizedBox(height: 20),
-
               TextFormField(
                 controller: titleController,
                 decoration: const InputDecoration(labelText: "Title"),
                 validator: (v) => v!.isEmpty ? "Enter a title" : null,
               ),
               const SizedBox(height: 12),
-
               TextFormField(
                 controller: descController,
                 maxLines: 3,
@@ -330,55 +295,34 @@ class _NewAnnouncementDialogState extends State<NewAnnouncementDialog> {
                 validator: (v) => v!.isEmpty ? "Enter a description" : null,
               ),
               const SizedBox(height: 12),
-
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(labelText: "Type"),
                 value: selectedType,
                 items: types
-                    .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                    .map((t) =>
+                    DropdownMenuItem(value: t, child: Text(t)))
                     .toList(),
                 onChanged: (v) => setState(() => selectedType = v),
                 validator: (v) => v == null ? "Select a type" : null,
               ),
               const SizedBox(height: 20),
-
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   icon: const Icon(Icons.upload),
-                  label: const Text("Post Announcement"),
-                  onPressed: () {
-                    if (_formKey.currentState!.validate()) {
-                      final newNotice = {
-                        "title": titleController.text,
-                        "description": descController.text,
-                        "type": selectedType ?? "General",
-                        "icon": Icons.campaign_outlined,
-                        "color": Colors.blue,
-                        "postedBy": "Admin",
-                        "date":
-                        "${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}",
-                        "id":
-                        "ANN${DateTime.now().millisecondsSinceEpoch % 10000}",
-                      };
-                      Navigator.pop(context, newNotice);
-                    }
-                  },
+                  label: isSubmitting
+                      ? const CircularProgressIndicator(
+                      color: Colors.white, strokeWidth: 2)
+                      : const Text("Post Announcement"),
+                  onPressed: isSubmitting ? null : _submitNotice,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.black,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    padding:
+                    const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10)),
                   ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Cancel"),
                 ),
               ),
             ],
@@ -388,5 +332,6 @@ class _NewAnnouncementDialogState extends State<NewAnnouncementDialog> {
     );
   }
 }
+
 
 

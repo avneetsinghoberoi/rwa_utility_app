@@ -54,7 +54,8 @@ class MyApp extends StatelessWidget {
         if (role == 'admin') {
           return const AdminDashboard();
         } else {
-          return const Dashboard();
+          final userData = snapshot.docs.first.data();
+          return Dashboard(userData: userData);
         }
       } else {
         debugPrint("⚠️ No Firestore document found for ${user.email}");

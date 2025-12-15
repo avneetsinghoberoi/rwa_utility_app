@@ -33,6 +33,9 @@ dependencies:
   google_fonts: ^6.3.0
   flutter_svg: ^2.0.7
   qr_flutter: ^4.1.0
+  intl: ^0.19.0
+  url_launcher: ^6.1.12
+
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -71,6 +74,8 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+  assets:
+    - assets/logo_rwa_app.png
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
