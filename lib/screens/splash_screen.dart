@@ -29,7 +29,7 @@ class _SplashScreenState extends State<SplashScreen> {
       } else {
         try {
           // ✅ Fetch userData from Firestore
-          final snapshot = await FirebaseFirestore.instance
+          final snapshot = await  FirebaseFirestore.instance
               .collection('users')
               .where('email', isEqualTo: user.email)
               .limit(1)
@@ -58,7 +58,7 @@ class _SplashScreenState extends State<SplashScreen> {
         }
       }
     });
-  }
+  }//end of screen
 
   @override
   Widget build(BuildContext context) {

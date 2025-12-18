@@ -117,7 +117,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   Padding(
                     padding: EdgeInsets.symmetric(horizontal: 20),
                     child: Text("Admin"),
-                  ),
+                  ),//Padding
                 ],
               ),
 

@@ -27,7 +27,7 @@ class _DashboardState extends State<Dashboard> {
       const IssuesScreen(),
       const NoticesScreen(),
       const ExpenseScreen(),
-      const UserProfileScreen(),
+      UserProfileScreen(),
     ];
     return Scaffold(
       body: screens[_currentIndex],
