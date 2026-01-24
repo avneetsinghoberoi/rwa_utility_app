@@ -1,0 +1,132 @@
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'firebase_options.dart';
+
+// Screens
+import 'screens/login/login_screen.dart';
+import 'screens/admin/admin_dashboard.dart';
+import 'screens/user/dashboard.dart';
+import 'screens/user/pay_screen.dart';
+import 'screens/user/issues_screen.dart';
+import 'screens/user/notices_screen.dart';
+import 'screens/user/expense_screen.dart';
+import 'screens/user/qrpass_screen.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // ✅ Correct Firebase initialization across all platforms
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  /// ✅ Determines which screen to show first
+  Future<Widget> _getLandingPage() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+
+      // 🔹 1. If no one logged in → go to Login screen
+      if (user == null) {
+        debugPrint("🔸 No user logged in → LoginScreen");
+        return const LoginScreen();
+      }
+
+      // 🔹 2. Get Firestore record for this user
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .where('email', isEqualTo: user.email)
+          .limit(1)
+          .get();
+
+      if (snapshot.docs.isNotEmpty) {
+        final role = snapshot.docs.first['role'] ?? 'user';
+        debugPrint("🔹 Logged in user role: $role");
+
+        if (role == 'admin') {
+          return const AdminDashboard();
+        } else {
+          final userData = snapshot.docs.first.data();
+          return Dashboard(userData: userData);
+        }
+      } else {
+        debugPrint("⚠️ No Firestore document found for ${user.email}");
+        return const LoginScreen();
+      }
+    } catch (e, stack) {
+      debugPrint("❌ Error in _getLandingPage(): $e");
+      debugPrint(stack.toString());
+      return Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
+          child: Text(
+            'Error loading screen:\n$e',
+            style: const TextStyle(color: Colors.red, fontSize: 16),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'RWA Manager',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        colorSchemeSeed: const Color(0xFF2F80ED),
+        textTheme: GoogleFonts.poppinsTextTheme(),
+      ),
+      home: FutureBuilder<Widget>(
+        future: _getLandingPage(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Scaffold(
+              backgroundColor: Colors.white,
+              body: Center(
+                child: CircularProgressIndicator(),
+              ),
+            );
+          } else if (snapshot.hasError) {
+            return Scaffold(
+              backgroundColor: Colors.white,
+              body: Center(
+                child: Text(
+                  'Something went wrong:\n${snapshot.error}',
+                  style: TextStyle(color: Colors.red, fontSize: 16),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            );
+          } else if (snapshot.hasData) {
+            return snapshot.data!;
+          } else {
+            return const Scaffold(
+              backgroundColor: Colors.white,
+              body: Center(
+                child: Text(
+                  'No screen found.\nPlease restart the app.',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            );
+          }
+        },
+      ),
+    );
+  }
+}
+
+
+
+

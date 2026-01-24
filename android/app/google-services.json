@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1085944093717",
+    "project_id": "rms-app-3d585",
+    "storage_bucket": "rms-app-3d585.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1085944093717:android:85eef057da5a129a2d421c",
+        "android_client_info": {
+          "package_name": "com.mysociety.rwa_application"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC155e-ThyIV1-O5ePyfKGsrrEibW817SI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
