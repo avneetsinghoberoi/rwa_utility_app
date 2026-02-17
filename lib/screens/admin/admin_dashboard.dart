@@ -19,7 +19,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   final List<Widget> _screens = [
     MembersScreen(), // optional - if you later add member list
     AdminPayScreen(),
-    AdminIssueScreen(),
+    AdminIssuesScreen(),
     AdminExpenseScreen(),
     AdminNoticesScreen(),
     AdminProfileScreen(),

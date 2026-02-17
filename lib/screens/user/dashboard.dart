@@ -56,8 +56,8 @@ class _DashboardState extends State<Dashboard> {
             label: "Expense",
           ),
           NavigationDestination(
-            icon: Icon(Icons.qr_code_2_outlined),
-            label: "QR Pass",
+            icon: Icon(Icons.person),
+            label: "Profile",
           ),
         ],
       ),

@@ -1,262 +1,237 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
+import 'package:rms_app/screens/login/login_screen.dart';
 
-class AdminIssueScreen extends StatefulWidget {
-  const AdminIssueScreen({super.key});
+class AdminIssuesScreen extends StatefulWidget {
+  const AdminIssuesScreen({super.key});
 
   @override
-  State<AdminIssueScreen> createState() => _AdminIssueScreenState();
+  State<AdminIssuesScreen> createState() => _AdminIssuesScreenState();
 }
 
-class _AdminIssueScreenState extends State<AdminIssueScreen> {
-  String selectedStatus = "Open";
+class _AdminIssuesScreenState extends State<AdminIssuesScreen> {
+  final complaintsRef = FirebaseFirestore.instance.collection("complaints");
 
-  final List<Map<String, dynamic>> complaints = [
-    {
-      "title": "Garbage not collected regularly",
-      "description": "Garbage bins overflowing, collection not happening on schedule",
-      "resident": "Mike Johnson",
-      "unit": "B-201",
-      "category": "Cleanliness",
-      "date": "22/10/2025",
-      "status": "Open"
-    },
-    {
-      "title": "Water leakage in Block A",
-      "description": "Leak detected near main pipeline junction in Block A",
-      "resident": "Jane Smith",
-      "unit": "A-102",
-      "category": "Maintenance",
-      "date": "20/10/2025",
-      "status": "In Progress"
-    },
-    {
-      "title": "Broken lights in parking area",
-      "description": "Two lights not functioning in basement parking area",
-      "resident": "John Doe",
-      "unit": "A-101",
-      "category": "Electrical",
-      "date": "18/10/2025",
-      "status": "Resolved"
-    },
-  ];
+  String _formatDate(Timestamp? ts) {
+    if (ts == null) return "-";
+    final dt = ts.toDate();
+    return DateFormat("dd MMM yyyy").format(dt);
+  }
+
+  Color _statusColor(String status) {
+    final s = status.toLowerCase();
+    if (s == "open") return Colors.red;
+    if (s == "in progress" || s == "progress") return Colors.blue;
+    if (s == "resolved" || s == "done" || s == "closed") return Colors.green;
+    return Colors.grey;
+  }
+
+  Future<void> _updateStatus(
+      String docId,
+      String newStatus,
+      ) async {
+    await complaintsRef.doc(docId).update({
+      "status": newStatus,
+      "updatedAt": FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> _resolveComplaintDialog(String docId) async {
+    final feedbackController = TextEditingController();
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text("Resolve Complaint", style: TextStyle(fontWeight: FontWeight.bold)),
+          content: TextField(
+            controller: feedbackController,
+            minLines: 3,
+            maxLines: 6,
+            decoration: const InputDecoration(
+              labelText: "Closing Message / Feedback",
+              hintText: "Example: Issue resolved. Electrician visited and fixed wiring.",
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(context, true),
+              icon: const Icon(Icons.check),
+              label: const Text("Mark Resolved"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.black,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (ok != true) return;
+
+    final feedback = feedbackController.text.trim();
+
+    await complaintsRef.doc(docId).update({
+      "status": "Resolved",
+      "adminFeedback": feedback,
+      "resolvedAt": FieldValue.serverTimestamp(),
+      "updatedAt": FieldValue.serverTimestamp(),
+    });
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Complaint resolved ✅")),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    List<Map<String, dynamic>> filteredComplaints =
-    complaints.where((c) => c["status"] == selectedStatus).toList();
-
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAFB),
       appBar: AppBar(
+        title: const Text("Admin Complaints", style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: const Text("Admin Portal", style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
-          IconButton(icon: const Icon(Icons.logout_rounded), onPressed: () {}),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Summary Cards
-            _summaryCard("Open", "2", "Require attention", Icons.error_outline, Colors.red),
-            const SizedBox(height: 12),
-            _summaryCard("In Progress", "1", "Being worked on", Icons.access_time, Colors.blue),
-            const SizedBox(height: 12),
-            _summaryCard("Resolved", "1", "Completed", Icons.check_circle_outline, Colors.green),
-            const SizedBox(height: 24),
-            const Divider(),
-            const SizedBox(height: 12),
-
-            // Complaint Management Header
-            const Text("Complaint Management",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            const Text("View, assign, and resolve resident complaints",
-                style: TextStyle(color: Colors.grey)),
-
-            const SizedBox(height: 12),
-            _statusChips(),
-
-            const SizedBox(height: 16),
-            Column(
-              children: filteredComplaints.map((complaint) {
-                return _complaintCard(complaint);
-              }).toList(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Summary Cards
-  Widget _summaryCard(String title, String count, String subtitle, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 3, spreadRadius: 1)],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title,
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
-              Text(count,
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-              Text(subtitle, style: const TextStyle(color: Colors.grey)),
-            ],
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () {
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+                    (route) => false,
+              );
+            },
           ),
-          Icon(icon, color: color, size: 26),
         ],
       ),
-    );
-  }
 
-  // Status Filter Chips
-  Widget _statusChips() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          _filterChip("Open", complaints.where((c) => c["status"] == "Open").length),
-          const SizedBox(width: 8),
-          _filterChip("In Progress", complaints.where((c) => c["status"] == "In Progress").length),
-          const SizedBox(width: 8),
-          _filterChip("Resolved", complaints.where((c) => c["status"] == "Resolved").length),
-        ],
+      body: StreamBuilder<QuerySnapshot>(
+        stream: complaintsRef.orderBy("createdAt", descending: true).snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return Center(child: Text("Error: ${snapshot.error}"));
+          }
+
+          final docs = snapshot.data?.docs ?? [];
+
+          if (docs.isEmpty) {
+            return const Center(child: Text("No complaints found."));
+          }
+
+          return ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: docs.length,
+            itemBuilder: (context, index) {
+              final doc = docs[index];
+              final data = doc.data() as Map<String, dynamic>;
+
+              final title = (data["title"] ?? "").toString();
+              final desc = (data["description"] ?? "").toString();
+              final category = (data["category"] ?? "General").toString();
+              final status = (data["status"] ?? "Open").toString();
+              final userName = (data["userName"] ?? "Unknown").toString();
+              final userPhone = (data["userPhone"] ?? "-").toString();
+              final createdAt = data["createdAt"] as Timestamp?;
+
+              final feedback = (data["adminFeedback"] ?? "").toString();
+
+              final color = _statusColor(status);
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Top row: Title + status
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                        ),
+                        Chip(
+                          label: Text(status),
+                          backgroundColor: color.withOpacity(0.12),
+                          labelStyle: TextStyle(color: color),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 6),
+
+                    Text(desc, style: const TextStyle(color: Colors.black87)),
+                    const SizedBox(height: 8),
+
+                    Text("Category: $category", style: const TextStyle(color: Colors.grey)),
+                    Text("Date: ${_formatDate(createdAt)}", style: const TextStyle(color: Colors.grey)),
+                    const SizedBox(height: 8),
+
+                    const Divider(),
+
+                    Text("Resident: $userName", style: const TextStyle(fontWeight: FontWeight.w600)),
+                    Text("Contact: $userPhone", style: const TextStyle(color: Colors.grey)),
+                    const SizedBox(height: 10),
+
+                    if (feedback.isNotEmpty) ...[
+                      Text("Admin Feedback:", style: const TextStyle(fontWeight: FontWeight.w600)),
+                      Text(feedback, style: const TextStyle(color: Colors.black87)),
+                      const SizedBox(height: 10),
+                    ],
+
+                    // Action buttons
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        if (status.toLowerCase() != "resolved") ...[
+                          TextButton(
+                            onPressed: () => _updateStatus(doc.id, "In Progress"),
+                            child: const Text("Mark In Progress"),
+                          ),
+                          const SizedBox(width: 10),
+                          ElevatedButton(
+                            onPressed: () => _resolveComplaintDialog(doc.id),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.black,
+                              foregroundColor: Colors.white,
+                            ),
+                            child: const Text("Resolve"),
+                          ),
+                        ] else
+                          const Text(
+                            "Closed",
+                            style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+                          )
+                      ],
+                    )
+                  ],
+                ),
+              );
+            },
+          );
+        },
       ),
-    );
-  }
-
-  Widget _filterChip(String label, int count) {
-    final isSelected = selectedStatus == label;
-    return ChoiceChip(
-      label: Text("$label ($count)",
-          style: TextStyle(
-              color: isSelected ? Colors.white : Colors.black87,
-              fontWeight: FontWeight.w500)),
-      selected: isSelected,
-      onSelected: (_) => setState(() => selectedStatus = label),
-      selectedColor: Colors.black,
-      backgroundColor: Colors.grey.shade200,
-      labelPadding: const EdgeInsets.symmetric(horizontal: 10),
-    );
-  }
-
-  // Complaint Card Widget
-  Widget _complaintCard(Map<String, dynamic> complaint) {
-    final Color color = complaint["status"] == "Open"
-        ? Colors.red
-        : complaint["status"] == "In Progress"
-        ? Colors.blue
-        : Colors.green;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 3, spreadRadius: 1)],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Title and status
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(complaint["title"],
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.bold, height: 1.3)),
-              ),
-              _statusChip(complaint["status"], color),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(complaint["description"], style: const TextStyle(color: Colors.black54)),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Text(complaint["resident"],
-                  style: const TextStyle(fontWeight: FontWeight.w500)),
-              const SizedBox(width: 4),
-              const Text("•"),
-              const SizedBox(width: 4),
-              Text(complaint["category"], style: const TextStyle(color: Colors.black54)),
-              const SizedBox(width: 4),
-              const Text("•"),
-              const SizedBox(width: 4),
-              Text(complaint["date"], style: const TextStyle(color: Colors.black54)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _assignDropdown(),
-        ],
-      ),
-    );
-  }
-
-  // Status Chip (colored label)
-  Widget _statusChip(String status, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-              status == "Open"
-                  ? Icons.error_outline
-                  : status == "In Progress"
-                  ? Icons.access_time
-                  : Icons.check_circle_outline,
-              size: 14,
-              color: Colors.white),
-          const SizedBox(width: 4),
-          Text(status.toLowerCase(),
-              style: const TextStyle(
-                  color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500)),
-        ],
-      ),
-    );
-  }
-
-  // Assign to Team Dropdown
-  Widget _assignDropdown() {
-    final List<String> teams = ["Security", "Maintenance", "Cleaning", "Electrical"];
-    String? selectedTeam;
-
-    return DropdownButtonFormField<String>(
-      decoration: InputDecoration(
-        labelText: "Assign to team",
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      ),
-      items: teams
-          .map((team) => DropdownMenuItem(
-        value: team,
-        child: Text(team),
-      ))
-          .toList(),
-      onChanged: (value) {
-        setState(() => selectedTeam = value);
-      },
-      value: selectedTeam,
-      hint: const Text("Assign to team"),
     );
   }
 }
+

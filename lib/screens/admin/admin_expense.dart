@@ -13,21 +13,31 @@ class AdminExpenseScreen extends StatefulWidget {
 class _AdminExpenseScreenState extends State<AdminExpenseScreen> {
   final _expensesRef = FirebaseFirestore.instance.collection('expenses');
 
+  String selectedMonthKey = _monthKey(DateTime.now());
+  String selectedMonthLabel = DateFormat('MMMM yyyy').format(DateTime.now());
+
+  static String _monthKey(DateTime d) {
+    final mm = d.month.toString().padLeft(2, '0');
+    return "${d.year}-$mm"; // YYYY-MM
+  }
+
+  String _formatCurrency(num n) => "₹${NumberFormat('#,##0').format(n)}";
+
   void _openAddExpenseDialog() async {
     final added = await showDialog<bool>(
       context: context,
-      builder: (context) => const AddExpenseDialog(),
+      builder: (context) => AddExpenseDialog(
+        defaultMonthKey: selectedMonthKey,
+        defaultMonthLabel: selectedMonthLabel,
+      ),
     );
 
-    // No need to do anything; StreamBuilder auto refreshes.
-    if (added == true) {
+    if (added == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Expense added successfully")),
       );
     }
   }
-
-  String _formatCurrency(num n) => "₹${NumberFormat('#,##0').format(n)}";
 
   @override
   Widget build(BuildContext context) {
@@ -51,152 +61,223 @@ class _AdminExpenseScreenState extends State<AdminExpenseScreen> {
         ],
       ),
 
-      // ✅ Now listening live from Firestore
-      body: StreamBuilder<QuerySnapshot>(
-        stream: _expensesRef.orderBy('date', descending: true).snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          final docs = snapshot.data?.docs ?? [];
-
-          // Summary calculations
-          final now = DateTime.now();
-          final currentMonthLabel = DateFormat('MMMM yyyy').format(now);
-
-          num totalAll = 0;
-          num totalCurrentMonth = 0;
-
-          for (final d in docs) {
-            final data = d.data() as Map<String, dynamic>;
-            final amount = (data['amount'] ?? 0) as num;
-            totalAll += amount;
-
-            final ts = data['date'];
-            final date = ts is Timestamp ? ts.toDate() : null;
-            if (date != null && date.month == now.month && date.year == now.year) {
-              totalCurrentMonth += amount;
-            }
-          }
-
-          // Unique categories count
-          final categorySet = <String>{};
-          for (final d in docs) {
-            final data = d.data() as Map<String, dynamic>;
-            final c = (data['category'] ?? '').toString();
-            if (c.isNotEmpty) categorySet.add(c);
-          }
-
-          return Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ✅ Month selector (admin portal view)
+            Row(
               children: [
-                // Summary Cards
-                Row(
-                  children: [
-                    _buildSummaryCard(
-                      "Current Month",
-                      _formatCurrency(totalCurrentMonth),
-                      currentMonthLabel,
-                      Icons.calendar_today_outlined,
-                    ),
-                    _buildSummaryCard(
-                      "Total Expenses",
-                      _formatCurrency(totalAll),
-                      "${docs.length} entries",
-                      Icons.receipt_long,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    _buildSummaryCard(
-                      "Categories",
-                      "${categorySet.length}",
-                      "Expense types",
-                      Icons.category_outlined,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-
-                // Header Row with Add Button
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      "Expense Management",
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    ElevatedButton.icon(
-                      onPressed: _openAddExpenseDialog,
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text("Add Expense"),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.black,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  "Post and manage monthly expense details for transparency",
-                  style: TextStyle(color: Colors.grey),
-                ),
-                const SizedBox(height: 10),
-
-                // Table
+                const Text("Month: ", style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: SingleChildScrollView(
-                      child: DataTable(
-                        columnSpacing: 30,
-                        headingRowColor: MaterialStateProperty.all(const Color(0xFFF4F6F8)),
-                        columns: const [
-                          DataColumn(label: Text("Date", style: TextStyle(fontWeight: FontWeight.bold))),
-                          DataColumn(label: Text("Month", style: TextStyle(fontWeight: FontWeight.bold))),
-                          DataColumn(label: Text("Category", style: TextStyle(fontWeight: FontWeight.bold))),
-                          DataColumn(label: Text("Description", style: TextStyle(fontWeight: FontWeight.bold))),
-                          DataColumn(label: Text("Amount", style: TextStyle(fontWeight: FontWeight.bold))),
-                        ],
-                        rows: docs.map((doc) {
-                          final e = doc.data() as Map<String, dynamic>;
-                          final ts = e['date'];
-                          final date = ts is Timestamp ? ts.toDate() : DateTime.now();
+                  child: StreamBuilder<QuerySnapshot>(
+                    stream: _expensesRef.orderBy('monthKey', descending: true).snapshots(),
+                    builder: (context, snap) {
+                      if (!snap.hasData) return const SizedBox(height: 48);
 
-                          final month = (e['month'] ?? '').toString();
-                          final category = (e['category'] ?? '').toString();
-                          final description = (e['description'] ?? '').toString();
-                          final amount = (e['amount'] ?? 0) as num;
+                      final docs = snap.data!.docs;
+                      final months = docs
+                          .map((d) => (d.data() as Map<String, dynamic>)['monthKey']?.toString())
+                          .whereType<String>()
+                          .toSet()
+                          .toList()
+                        ..sort((a, b) => b.compareTo(a));
 
-                          return DataRow(
-                            cells: [
-                              DataCell(Text(DateFormat('d/M/yyyy').format(date))),
-                              DataCell(Text(month)),
-                              DataCell(Text(category)),
-                              DataCell(Text(description)),
-                              DataCell(Text(_formatCurrency(amount))),
-                            ],
-                          );
-                        }).toList(),
-                      ),
-                    ),
+                      if (months.isEmpty) {
+                        months.add(selectedMonthKey);
+                      }
+                      if (!months.contains(selectedMonthKey)) {
+                        months.insert(0, selectedMonthKey);
+                      }
+
+                      return DropdownButton<String>(
+                        isExpanded: true,
+                        value: selectedMonthKey,
+                        items: months
+                            .map((m) => DropdownMenuItem(
+                          value: m,
+                          child: Text(_prettyMonthLabelFromKey(m)),
+                        ))
+                            .toList(),
+                        onChanged: (v) {
+                          if (v == null) return;
+                          setState(() {
+                            selectedMonthKey = v;
+                            selectedMonthLabel = _prettyMonthLabelFromKey(v);
+                          });
+                        },
+                      );
+                    },
                   ),
                 ),
               ],
             ),
-          );
-        },
+
+            const SizedBox(height: 14),
+
+            // ✅ Filtered list for selected month
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: _expensesRef
+                    .where('monthKey', isEqualTo: selectedMonthKey)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snapshot.hasError) {
+                    // If you see an index error, create the index from the link in console.
+                    return Center(child: Text("Error: ${snapshot.error}"));
+                  }
+
+                  final docs = (snapshot.data?.docs ?? []).toList()
+                    ..sort((a, b) {
+                      final ad = ((a.data() as Map<String, dynamic>)['date'] as Timestamp?)?.toDate();
+                      final bd = ((b.data() as Map<String, dynamic>)['date'] as Timestamp?)?.toDate();
+                      if (ad == null && bd == null) return 0;
+                      if (ad == null) return 1;
+                      if (bd == null) return -1;
+                      return bd.compareTo(ad); // DESC
+                    });
+
+                  num totalMonth = 0;
+                  final categorySet = <String>{};
+
+                  for (final d in docs) {
+                    final data = d.data() as Map<String, dynamic>;
+                    final amount = (data['amount'] ?? 0) as num;
+                    totalMonth += amount;
+
+                    final c = (data['label'] ?? data['category'] ?? '').toString();
+                    if (c.isNotEmpty) categorySet.add(c);
+                  }
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Summary cards
+                      Row(
+                        children: [
+                          _buildSummaryCard(
+                            "Selected Month",
+                            _formatCurrency(totalMonth),
+                            selectedMonthLabel,
+                            Icons.calendar_today_outlined,
+                          ),
+                          _buildSummaryCard(
+                            "Entries",
+                            "${docs.length}",
+                            "in this month",
+                            Icons.receipt_long,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          _buildSummaryCard(
+                            "Categories",
+                            "${categorySet.length}",
+                            "expense types",
+                            Icons.category_outlined,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+
+                      // Header + Add button
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            "Expense Management",
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                          ElevatedButton.icon(
+                            onPressed: _openAddExpenseDialog,
+                            icon: const Icon(Icons.add, size: 18),
+                            label: const Text("Add Expense"),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.black,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        "Post and manage monthly expense details for transparency",
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                      const SizedBox(height: 10),
+
+                      Expanded(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: SingleChildScrollView(
+                            child: DataTable(
+                              columnSpacing: 26,
+                              headingRowColor: MaterialStateProperty.all(const Color(0xFFF4F6F8)),
+                              columns: const [
+                                DataColumn(label: Text("Date", style: TextStyle(fontWeight: FontWeight.bold))),
+                                DataColumn(label: Text("Category", style: TextStyle(fontWeight: FontWeight.bold))),
+                                DataColumn(label: Text("Description", style: TextStyle(fontWeight: FontWeight.bold))),
+                                DataColumn(label: Text("Amount", style: TextStyle(fontWeight: FontWeight.bold))),
+                                DataColumn(label: Text("Action", style: TextStyle(fontWeight: FontWeight.bold))),
+                              ],
+                              rows: docs.map((doc) {
+                                final e = doc.data() as Map<String, dynamic>;
+                                final ts = e['date'];
+                                final date = ts is Timestamp ? ts.toDate() : DateTime.now();
+
+                                final label = (e['label'] ?? e['category'] ?? '').toString();
+                                final description = (e['description'] ?? '').toString();
+                                final amount = (e['amount'] ?? 0) as num;
+
+                                return DataRow(
+                                  cells: [
+                                    DataCell(Text(DateFormat('d/M/yyyy').format(date))),
+                                    DataCell(Text(label)),
+                                    DataCell(Text(description)),
+                                    DataCell(Text(_formatCurrency(amount))),
+                                    DataCell(
+                                      IconButton(
+                                        icon: const Icon(Icons.delete_outline),
+                                        onPressed: () async {
+                                          await _expensesRef.doc(doc.id).delete();
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  String _prettyMonthLabelFromKey(String monthKey) {
+    // monthKey = YYYY-MM
+    final parts = monthKey.split("-");
+    if (parts.length != 2) return monthKey;
+    final year = int.tryParse(parts[0]) ?? DateTime.now().year;
+    final month = int.tryParse(parts[1]) ?? DateTime.now().month;
+    return DateFormat('MMMM yyyy').format(DateTime(year, month, 1));
   }
 
   Widget _buildSummaryCard(String title, String value, String subtitle, IconData icon) {
@@ -234,7 +315,14 @@ class _AdminExpenseScreenState extends State<AdminExpenseScreen> {
 }
 
 class AddExpenseDialog extends StatefulWidget {
-  const AddExpenseDialog({super.key});
+  final String defaultMonthKey;
+  final String defaultMonthLabel;
+
+  const AddExpenseDialog({
+    super.key,
+    required this.defaultMonthKey,
+    required this.defaultMonthLabel,
+  });
 
   @override
   State<AddExpenseDialog> createState() => _AddExpenseDialogState();
@@ -243,27 +331,15 @@ class AddExpenseDialog extends StatefulWidget {
 class _AddExpenseDialogState extends State<AddExpenseDialog> {
   final _formKey = GlobalKey<FormState>();
 
-  String month = "October 2025";
+  late String monthKey;
+  late String monthLabel;
+
   String? category;
   String description = "";
   String amount = "";
   DateTime date = DateTime.now();
 
-  final List<String> months = const [
-    "January 2025",
-    "February 2025",
-    "March 2025",
-    "April 2025",
-    "May 2025",
-    "June 2025",
-    "July 2025",
-    "August 2025",
-    "September 2025",
-    "October 2025",
-    "November 2025",
-    "December 2025",
-  ];
-
+  // ✅ keep categories like your old ones
   final List<String> categories = const [
     "Electricity",
     "Water Supply",
@@ -272,6 +348,37 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
     "Security",
     "Administrative",
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    monthKey = widget.defaultMonthKey;
+    monthLabel = widget.defaultMonthLabel;
+  }
+
+  String _formatMonthLabelFromKey(String key) {
+    final parts = key.split("-");
+    if (parts.length != 2) return key;
+    final y = int.tryParse(parts[0]) ?? DateTime.now().year;
+    final m = int.tryParse(parts[1]) ?? DateTime.now().month;
+    return DateFormat('MMMM yyyy').format(DateTime(y, m, 1));
+  }
+
+  Future<void> _pickMonth() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(date.year, date.month, 1),
+      firstDate: DateTime(2024, 1, 1),
+      lastDate: DateTime(2030, 12, 31),
+      helpText: "Select any date in the month",
+    );
+    if (picked == null) return;
+
+    setState(() {
+      monthKey = "${picked.year}-${picked.month.toString().padLeft(2, '0')}";
+      monthLabel = DateFormat('MMMM yyyy').format(DateTime(picked.year, picked.month, 1));
+    });
+  }
 
   Future<void> _saveExpense() async {
     final parsedAmount = num.tryParse(amount.replaceAll(',', '').trim());
@@ -291,14 +398,15 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
 
     await FirebaseFirestore.instance.collection('expenses').add({
       "date": Timestamp.fromDate(date),
-      "month": month,
-      "category": category,
+      "monthKey": monthKey,
+      "monthLabel": monthLabel,          // optional, but useful
+      "label": category,                 // ✅ use 'label' consistently
       "description": description.trim(),
       "amount": parsedAmount,
       "createdAt": FieldValue.serverTimestamp(),
     });
 
-    Navigator.pop(context, true); // ✅ tell admin screen that add succeeded
+    Navigator.pop(context, true);
   }
 
   @override
@@ -312,11 +420,15 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              DropdownButtonFormField<String>(
-                decoration: const InputDecoration(labelText: "Month"),
-                value: month,
-                items: months.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
-                onChanged: (value) => setState(() => month = value ?? month),
+              // ✅ Month picker (writes monthKey)
+              TextFormField(
+                readOnly: true,
+                decoration: const InputDecoration(
+                  labelText: "Month",
+                  suffixIcon: Icon(Icons.calendar_month_outlined),
+                ),
+                controller: TextEditingController(text: monthLabel),
+                onTap: _pickMonth,
               ),
               const SizedBox(height: 10),
 
@@ -352,7 +464,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                         context: context,
                         initialDate: date,
                         firstDate: DateTime(2024),
-                        lastDate: DateTime(2026),
+                        lastDate: DateTime(2030),
                       );
                       if (picked != null) {
                         setState(() => date = picked);
@@ -386,5 +498,6 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
     );
   }
 }
+
 
 
