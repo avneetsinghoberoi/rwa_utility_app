@@ -1,41 +1,101 @@
-const functions = require("firebase-functions");
 const admin = require("firebase-admin");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
+
 admin.initializeApp();
 
-/**
- * Automatically adds ₹500 dues to all users on the 1st of each month.
- */
-exports.addMonthlyDues = functions.pubsub
-  .schedule("0 0 1 * *") // runs every 1st of month at midnight UTC
-  .timeZone("Asia/Kolkata")
-  .onRun(async (context) => {
-    const db = admin.firestore();
-    const usersRef = db.collection("users");
-    const snapshot = await usersRef.get();
+exports.verifyPayment = onCall({ region: "asia-south1" }, async (request) => {
+  const db = admin.firestore();
+  const uid = request.auth?.uid;
 
-    const now = new Date();
+  if (!uid) throw new HttpsError("unauthenticated", "Login required.");
 
-    for (const doc of snapshot.docs) {
-      const data = doc.data();
-      const currentDue = data.dues || 0;
-      const lastDueUpdate = data.last_due_update
-        ? new Date(data.last_due_update)
-        : null;
+  // ✅ Simple admin check (based on your users.role)
+  const adminDoc = await db.collection("users").doc(uid).get();
+  if (!adminDoc.exists || (adminDoc.data()?.role || "").toLowerCase() != "admin") {
+    throw new HttpsError("permission-denied", "Admin only.");
+  }
 
-      // Add dues only if not already updated this month
-      if (!lastDueUpdate || now.getMonth() !== lastDueUpdate.getMonth()) {
-        await doc.ref.update({
-          dues: currentDue + 500,
-          maintenance_status: "Pending",
-          last_due_update: now.toISOString(),
-        });
-        console.log(`✅ Updated dues for ${doc.id}`);
-      } else {
-        console.log(`⏭️ Already updated this month for ${doc.id}`);
-      }
+  const { paymentDocId } = request.data || {};
+  if (!paymentDocId) throw new HttpsError("invalid-argument", "paymentDocId is required");
+
+  const paymentRef = db.collection("payments_new").doc(paymentDocId);
+
+  return await db.runTransaction(async (tx) => {
+    const paySnap = await tx.get(paymentRef);
+    if (!paySnap.exists) throw new HttpsError("not-found", "Payment not found");
+
+    const pay = paySnap.data();
+
+    if (pay.status !== "SUBMITTED") {
+      throw new HttpsError("failed-precondition", "Payment already processed");
     }
 
-    console.log("🎉 Monthly dues added successfully!");
-    return null;
+    const invoiceId = pay.invoice_id;
+    const invoiceRef = db.collection("invoices").doc(invoiceId);
+    const invSnap = await tx.get(invoiceRef);
+    if (!invSnap.exists) throw new HttpsError("not-found", "Invoice not found");
+
+    const inv = invSnap.data();
+    const userRef = db.collection("users").doc(pay.uid);
+
+    // 1) mark payment verified
+    tx.update(paymentRef, {
+      status: "VERIFIED",
+      verified_at: admin.firestore.FieldValue.serverTimestamp(),
+      verified_by: uid,
+      admin_note: pay.admin_note || "",
+    });
+
+    // 2) update invoice
+    const paidAmount = Number(inv.paid_amount || 0) + Number(pay.amount || 0);
+    const invoiceTotal = Number(inv.amount || 0);
+
+    tx.update(invoiceRef, {
+      paid_amount: paidAmount,
+      status: paidAmount >= invoiceTotal ? "PAID" : "PARTIAL",
+      updated_at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // 3) update your existing user fields (same ones your scheduler uses)
+    tx.set(
+      userRef,
+      {
+        dues: admin.firestore.FieldValue.increment(-Number(pay.amount || 0)),
+        ledger: {
+          total_paid: admin.firestore.FieldValue.increment(Number(pay.amount || 0)),
+          updated_at: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        last_payment_date: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    return { ok: true };
   });
+});
+
+exports.rejectPayment = onCall({ region: "asia-south1" }, async (request) => {
+  const db = admin.firestore();
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Login required.");
+
+  const adminDoc = await db.collection("users").doc(uid).get();
+  if (!adminDoc.exists || (adminDoc.data()?.role || "").toLowerCase() != "admin") {
+    throw new HttpsError("permission-denied", "Admin only.");
+  }
+
+  const { paymentDocId, reason } = request.data || {};
+  if (!paymentDocId) throw new HttpsError("invalid-argument", "paymentDocId is required");
+
+  await db.collection("payments_new").doc(paymentDocId).update({
+    status: "REJECTED",
+    verified_at: admin.firestore.FieldValue.serverTimestamp(),
+    verified_by: uid,
+    admin_note: reason || "Rejected",
+  });
+
+  return { ok: true };
+});
+
+
 

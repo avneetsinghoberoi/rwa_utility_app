@@ -31,7 +31,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
         screen = const NoticesScreen();
         break;
       case 3:
-        screen = const PayScreen();
+        screen = const UserPayScreen();
         break;
       case 4:
         screen = const ExpenseScreen();
@@ -68,7 +68,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                 trailing: ElevatedButton(
                   onPressed: () => Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const PayScreen()),
+                    MaterialPageRoute(builder: (_) => const UserPayScreen()),
                   ),
                   child: const Text("Pay Now"),
                 ),
@@ -132,7 +132,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
               mainAxisSpacing: 10,
               physics: const NeverScrollableScrollPhysics(),
               children: [
-                _quickButton(context, Icons.payment, "Pay", const PayScreen()),
+                _quickButton(context, Icons.payment, "Pay", const UserPayScreen()),
                 _quickButton(
                     context, Icons.report_problem, "Issue", const IssuesScreen()),
                 _quickButton(

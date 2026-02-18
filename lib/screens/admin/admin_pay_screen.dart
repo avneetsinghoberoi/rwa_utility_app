@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class AdminPayScreen extends StatefulWidget {
   const AdminPayScreen({super.key});
@@ -10,236 +10,283 @@ class AdminPayScreen extends StatefulWidget {
 }
 
 class _AdminPayScreenState extends State<AdminPayScreen> {
-  String selectedFilter = "All";
-  String searchQuery = "";
+  // ✅ Change region if you deployed functions elsewhere
+  final FirebaseFunctions _functions =
+  FirebaseFunctions.instanceFor(region: "us-central1");
+
+  // ✅ Change collection name if yours is different
+  final CollectionReference<Map<String, dynamic>> _paymentsRef =
+  FirebaseFirestore.instance.collection("payments");
+
+  String _formatMoney(dynamic v) {
+    final n = (v is num) ? v : num.tryParse(v?.toString() ?? "0") ?? 0;
+    return "₹${n.toStringAsFixed(0)}";
+  }
+
+  DateTime? _toDate(dynamic ts) {
+    if (ts is Timestamp) return ts.toDate();
+    return null;
+  }
+
+  Future<void> _verifyPayment({
+    required String paymentDocId,
+  }) async {
+    try {
+      final callable = _functions.httpsCallable("verifyPayment");
+      await callable.call({"paymentDocId": paymentDocId});
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("✅ Payment verified successfully")),
+      );
+    } on FirebaseFunctionsException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("❌ Verify failed: ${e.message ?? e.code}")),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("❌ Verify failed: $e")),
+      );
+    }
+  }
+
+  Future<void> _rejectPayment({
+    required String paymentDocId,
+    required String reason,
+  }) async {
+    try {
+      final callable = _functions.httpsCallable("rejectPayment");
+      await callable.call({"paymentDocId": paymentDocId, "reason": reason});
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("✅ Payment rejected")),
+      );
+    } on FirebaseFunctionsException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("❌ Reject failed: ${e.message ?? e.code}")),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("❌ Reject failed: $e")),
+      );
+    }
+  }
+
+  Future<void> _confirmVerify(String paymentDocId) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Verify payment?"),
+        content: const Text(
+          "This will mark the payment as VERIFIED (and should update dues/invoice via Cloud Function).",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("Verify"),
+          ),
+        ],
+      ),
+    );
+
+    if (ok == true) {
+      await _verifyPayment(paymentDocId: paymentDocId);
+    }
+  }
+
+  Future<void> _confirmReject(String paymentDocId) async {
+    final controller = TextEditingController();
+
+    final result = await showDialog<String?>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Reject payment"),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: "Reason (required)",
+            hintText: "e.g., Transaction proof not clear",
+          ),
+          maxLines: 2,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, null),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final reason = controller.text.trim();
+              Navigator.pop(ctx, reason.isEmpty ? null : reason);
+            },
+            child: const Text("Reject"),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result.trim().isNotEmpty) {
+      await _rejectPayment(paymentDocId: paymentDocId, reason: result.trim());
+    } else if (result == null) {
+      // cancelled
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("❗ Please enter a rejection reason")),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    // ✅ If your status field differs, change this filter:
+    final query = _paymentsRef
+        .where("status", isEqualTo: "PENDING")
+        .orderBy("created_at", descending: true);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
       appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        title: const Text("Admin Portal", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text("Admin • Payment Verification"),
       ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection('users').snapshots(),
-            builder: (context, snapshot) {
-              if (!snapshot.hasData) {
-                return const Center(child: CircularProgressIndicator());
-              }
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: query.snapshots(),
+        builder: (context, snap) {
+          if (snap.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text("❌ Error: ${snap.error}"),
+              ),
+            );
+          }
 
-              final users = snapshot.data!.docs;
-              final totalExpected = users.length * 500;
-              double collected = 0.0;
-              double pending = 0.0;
+          if (snap.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-              final List<Map<String, dynamic>> paymentData = users.map((doc) {
-                final data = doc.data() as Map<String, dynamic>;
-                final name = data['name'] ?? 'N/A';
-                final houseNo = data['house_no'] ?? '-';
-                final status = data['maintenance_status'] ?? 'Pending';
-                final dues = data['dues'] ?? 0;
-                final lastPayment = data['last_payment_date'] ?? '-';
+          final docs = snap.data?.docs ?? [];
+          if (docs.isEmpty) {
+            return const Center(
+              child: Text("No pending payments ✅"),
+            );
+          }
 
-                if (status.toLowerCase() == 'paid') collected += 500.0;
-                if (status.toLowerCase() != 'paid') pending += dues;
+          return ListView.separated(
+            padding: const EdgeInsets.all(12),
+            itemCount: docs.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            itemBuilder: (context, i) {
+              final doc = docs[i];
+              final data = doc.data();
 
-                return {
-                  'name': name,
-                  'unit': houseNo,
-                  'status': status,
-                  'dues': dues,
-                  'paidDate': lastPayment != '-' ? lastPayment.toString().split('T').first : '-',
-                  'id': doc.id,
-                };
-              }).toList();
+              final uid = (data["uid"] ?? "").toString();
+              final houseNo = (data["house_no"] ?? data["houseNo"] ?? "-").toString();
+              final month = (data["month"] ?? "-").toString();
+              final amount = data["amount"];
+              final txnId = (data["txnId"] ?? data["transaction_id"] ?? "-").toString();
+              final createdAt = _toDate(data["created_at"]);
+              final proofUrl = (data["proofUrl"] ?? data["proof_url"] ?? "").toString();
 
-              List<Map<String, dynamic>> filteredPayments = paymentData;
-              if (selectedFilter != "All") {
-                filteredPayments = filteredPayments
-                    .where((p) => p['status'].toLowerCase() == selectedFilter.toLowerCase())
-                    .toList();
-              }
-              if (searchQuery.isNotEmpty) {
-                filteredPayments = filteredPayments
-                    .where((p) =>
-                p['name'].toLowerCase().contains(searchQuery.toLowerCase()) ||
-                    p['unit'].toLowerCase().contains(searchQuery.toLowerCase()) ||
-                    p['id'].toLowerCase().contains(searchQuery.toLowerCase()))
-                    .toList();
-              }
-
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _summaryCard("Total Expected", "₹$totalExpected", "${users.length} residents", Icons.currency_rupee, Colors.black),
-                  const SizedBox(height: 12),
-                  _summaryCard("Collected", "₹$collected", "Payments received", Icons.check_circle_outline, Colors.green),
-                  const SizedBox(height: 12),
-                  _summaryCard("Pending", "₹$pending", "Outstanding balance", Icons.access_time_outlined, Colors.orange),
-                  const SizedBox(height: 20),
-                  const Divider(),
-
-                  // Search Field
-                  TextField(
-                    decoration: InputDecoration(
-                      hintText: "Search by name, unit, or ID",
-                      prefixIcon: const Icon(Icons.search),
-                      filled: true,
-                      fillColor: Colors.white,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide.none,
+              return Card(
+                elevation: 1,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header row
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              "House: $houseNo  •  ${_formatMoney(amount)}",
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: const Text(
+                              "PENDING",
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    onChanged: (query) => setState(() => searchQuery = query),
-                  ),
+                      const SizedBox(height: 8),
 
-                  const SizedBox(height: 12),
-
-                  // Filter Chips
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        _filterChip("All", paymentData.length),
-                        const SizedBox(width: 8),
-                        _filterChip("Paid", paymentData.where((p) => p["status"].toLowerCase() == "paid").length),
-                        const SizedBox(width: 8),
-                        _filterChip("Pending", paymentData.where((p) => p["status"].toLowerCase() == "pending").length),
+                      Text("Month: $month"),
+                      const SizedBox(height: 4),
+                      Text("UID: ${uid.isEmpty ? "-" : uid}"),
+                      const SizedBox(height: 4),
+                      Text("Txn ID: $txnId"),
+                      if (createdAt != null) ...[
+                        const SizedBox(height: 4),
+                        Text("Created: ${createdAt.toLocal()}"),
                       ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
 
-                  // Table
-                  Expanded(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.vertical,
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: _paymentsTable(filteredPayments),
+                      if (proofUrl.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        InkWell(
+                          onTap: () {
+                            // If you want, we can open URL using url_launcher
+                          },
+                          child: Text(
+                            "Proof: $proofUrl",
+                            style: const TextStyle(
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ],
+
+                      const SizedBox(height: 12),
+
+                      // Actions
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => _confirmReject(doc.id),
+                              child: const Text("Reject"),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () => _confirmVerify(doc.id),
+                              child: const Text("Verify"),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               );
             },
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _summaryCard(String title, String amount, String subtitle, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 3, spreadRadius: 1)],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 8),
-                Text(amount, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)),
-                Text(subtitle, style: const TextStyle(color: Colors.grey)),
-              ],
-            ),
-          ),
-          Icon(icon, size: 28, color: color),
-        ],
-      ),
-    );
-  }
-
-  Widget _filterChip(String label, int count) {
-    final isSelected = selectedFilter == label;
-    return ChoiceChip(
-      label: Text(
-        "$label ($count)",
-        style: TextStyle(
-          color: isSelected ? Colors.white : Colors.black87,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-      selected: isSelected,
-      onSelected: (_) => setState(() => selectedFilter = label),
-      selectedColor: Colors.black,
-      backgroundColor: Colors.grey.shade200,
-      labelPadding: const EdgeInsets.symmetric(horizontal: 10),
-    );
-  }
-
-  Widget _paymentsTable(List<Map<String, dynamic>> filtered) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 3, spreadRadius: 1)],
-      ),
-      child: DataTable(
-        headingRowColor: MaterialStateProperty.all(const Color(0xFFF4F6F8)),
-        columns: const [
-          DataColumn(label: Text("Member", style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text("Unit", style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text("Status", style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text("Dues", style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(label: Text("Paid Date", style: TextStyle(fontWeight: FontWeight.bold))),
-        ],
-        rows: filtered.map((p) {
-          return DataRow(
-            cells: [
-              DataCell(Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(p["name"], style: const TextStyle(fontWeight: FontWeight.w500)),
-                  Text(p["id"], style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                ],
-              )),
-              DataCell(Text(p["unit"].toString())),
-              DataCell(_statusChip(p["status"])),
-              DataCell(Text("₹${p["dues"]}")),
-              DataCell(Text(p["paidDate"])),
-            ],
           );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _statusChip(String status) {
-    final isPaid = status.toLowerCase() == "paid";
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: isPaid ? Colors.green : Colors.red,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(isPaid ? Icons.check_circle_outline : Icons.access_time, size: 14, color: Colors.white),
-          const SizedBox(width: 4),
-          Text(
-            status,
-            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
-          ),
-        ],
+        },
       ),
     );
   }
 }
+
+
 
 

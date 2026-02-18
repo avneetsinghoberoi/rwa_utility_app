@@ -23,7 +23,7 @@ class _DashboardState extends State<Dashboard> {
   Widget build(BuildContext context) {
     final screens = [
       UserHomeScreen(userData: widget.userData),  // ✅ Legal here
-      const PayScreen(),
+      const UserPayScreen(),
       const IssuesScreen(),
       const NoticesScreen(),
       const ExpenseScreen(),
