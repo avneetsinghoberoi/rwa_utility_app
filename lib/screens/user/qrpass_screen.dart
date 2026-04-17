@@ -1,10 +1,12 @@
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:rms_app/screens/login/login_screen.dart';
-import 'dart:convert';
-import 'dart:core';
+import 'package:rms_app/theme/app_theme.dart';
 
 class UserProfileScreen extends StatefulWidget {
   const UserProfileScreen({super.key});
@@ -23,13 +25,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     fetchUserData();
   }
 
-  /// 🔍 Fetch user data from Firestore by email
+  // ── Fetch user data (logic unchanged) ─────────────────────────
   Future<void> fetchUserData() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) return;
 
     try {
-      // Query Firestore for a document where email == currentUser.email
       final querySnapshot = await FirebaseFirestore.instance
           .collection('users')
           .where('email', isEqualTo: currentUser.email)
@@ -48,154 +49,337 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         });
       }
     } catch (e) {
-      print("Error fetching user data: $e");
+      debugPrint('Error fetching user data: $e');
       setState(() => isLoading = false);
     }
   }
 
+  // ── Build ───────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     if (userData == null) {
       return const Scaffold(
-        body: Center(child: Text("No user data found.")),
-      );
+          body: Center(child: Text('No user data found.')));
     }
 
+    final name = userData!['name'] ?? 'Unknown User';
+    final houseNo = userData!['house_no'] ?? '-';
+    final initials = name.isNotEmpty ? name[0].toUpperCase() : '?';
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        title: const Text("My Profile", style: TextStyle(fontWeight: FontWeight.bold)),
-        elevation: 0,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            // Profile Avatar
-            const CircleAvatar(
-              radius: 50,
-              backgroundColor: Colors.black12,
-              child: Icon(Icons.person, size: 50, color: Colors.black54),
-            ),
-            const SizedBox(height: 16),
-
-            Text(
-              userData!["name"] ?? "Unknown User",
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              "House No. ${userData!["house_no"] ?? "-"}",
-              style: const TextStyle(color: Colors.grey, fontSize: 15),
-            ),
-            const SizedBox(height: 24),
-
-            // Information Card
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
+      backgroundColor: AppColors.background,
+      body: CustomScrollView(
+        slivers: [
+          // ── Gradient header ─────────────────────────────────────
+          SliverAppBar(
+            expandedHeight: 200,
+            pinned: true,
+            backgroundColor: AppColors.primaryDark,
+            flexibleSpace: FlexibleSpaceBar(
+              background: Container(
+                decoration:
+                    const BoxDecoration(gradient: AppTheme.primaryGradient),
+                child: Stack(
+                  children: [
+                    // Decorative circle
+                    Positioned(
+                      top: -50,
+                      right: -50,
+                      child: Container(
+                        width: 200,
+                        height: 200,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.06),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                    // Avatar + name
+                    Align(
+                      alignment: Alignment.center,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const SizedBox(height: 40),
+                          // Avatar circle
+                          Container(
+                            width: 80,
+                            height: 80,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                  color: Colors.white.withOpacity(0.4),
+                                  width: 2.5),
+                            ),
+                            child: Center(
+                              child: Text(
+                                initials,
+                                style: const TextStyle(
+                                  fontSize: 34,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'House No. $houseNo',
+                            style: TextStyle(
+                                color: Colors.white.withOpacity(0.8),
+                                fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
+            ),
+          ),
+
+          // ── Content ──────────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  InfoRow(label: "Email", value: userData!["email"] ?? "-"),
-                  const Divider(),
-                  InfoRow(label: "Phone", value: userData!["phone"] ?? "-"),
-                  const Divider(),
-                  InfoRow(label: "Floor", value: userData!["floor"] ?? "-"),
-                  const Divider(),
-                  InfoRow(label: "Maintenance", value: userData!["maintenance_status"] ?? "-"),
-                  const Divider(),
-                  InfoRow(label: "Dues (₹)", value: "${userData!["dues"] ?? 0}"),
-                  const Divider(),
-                  InfoRow(label: "Last Payment", value: userData!["last_payment_date"] ?? "-"),
+                  // ── Info card ─────────────────────────────────
+                  _buildInfoCard(),
+                  const SizedBox(height: 16),
+
+                  // ── QR code card ──────────────────────────────
+                  _buildQrCard(),
+                  const SizedBox(height: 24),
+
+                  // ── Logout button ─────────────────────────────
+                  AppTheme.gradientButton(
+                    label: 'Logout',
+                    onTap: _logout,
+                    height: 52,
+                    icon: Icons.logout_rounded,
+                  ),
+                  const SizedBox(height: 20),
                 ],
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
 
-            const SizedBox(height: 30),
+  // ── Info Card ────────────────────────────────────────────────────
+  Widget _buildInfoCard() {
+    // Safely format last_payment_date — Firestore returns a Timestamp, not a String
+    final rawDate = userData!['last_payment_date'];
+    String lastPayment = '-';
+    if (rawDate is Timestamp) {
+      lastPayment = DateFormat('dd MMM yyyy').format(rawDate.toDate());
+    } else if (rawDate is String && rawDate.isNotEmpty) {
+      lastPayment = rawDate;
+    }
 
-            // QR Code Card
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4)],
-              ),
-              child: Column(
-                children: [
-                  const Text(
-                    "Your Entry QR Code",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+    final rows = [
+      _InfoEntry('Email', userData!['email']?.toString() ?? '-', Icons.email_outlined),
+      _InfoEntry('Phone', userData!['phone']?.toString() ?? '-', Icons.phone_outlined),
+      _InfoEntry('Floor', userData!['floor']?.toString() ?? '-', Icons.layers_outlined),
+      _InfoEntry('Maintenance Status', userData!['maintenance_status']?.toString() ?? '-',
+          Icons.check_circle_outline),
+      _InfoEntry('Dues (₹)', '${userData!['dues'] ?? 0}',
+          Icons.account_balance_wallet_outlined),
+      _InfoEntry('Last Payment', lastPayment, Icons.calendar_today_outlined),
+    ];
+
+    return Container(
+      decoration: AppTheme.cardDecoration,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Row(
+              children: [
+                const Icon(Icons.person_outline_rounded,
+                    color: AppColors.primary, size: 18),
+                const SizedBox(width: 8),
+                const Text(
+                  'Profile Details',
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: AppColors.textPrimary),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: AppColors.divider),
+          ...rows.asMap().entries.map((entry) {
+            final isLast = entry.key == rows.length - 1;
+            return Column(
+              children: [
+                _buildInfoRow(entry.value),
+                if (!isLast)
+                  const Divider(
+                      height: 1,
+                      color: AppColors.divider,
+                      indent: 56),
+              ],
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(_InfoEntry entry) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(entry.icon, color: AppColors.primary, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              entry.label,
+              style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 13,
+                  color: AppColors.textSecondary),
+            ),
+          ),
+          Flexible(
+            child: Text(
+              entry.value,
+              textAlign: TextAlign.end,
+              style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  color: AppColors.textPrimary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── QR Code Card ─────────────────────────────────────────────────
+  Widget _buildQrCard() {
+    return Container(
+      decoration: AppTheme.cardDecoration,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryLight,
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  const SizedBox(height: 12),
-                  QrImageView(
-                    // ✅ Encode all user info into the QR
+                  child: const Icon(Icons.qr_code_rounded,
+                      color: AppColors.primary, size: 18),
+                ),
+                const SizedBox(width: 10),
+                const Text(
+                  'Entry QR Code',
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: AppColors.textPrimary),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: AppColors.divider),
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: QrImageView(
                     data: jsonEncode({
-                      "name": userData?["name"] ?? "Unknown",
-                      "house_no": userData?["house_no"] ?? "N/A",
-                      "phone": userData?["phone"] ?? "N/A"
+                      'name': userData?['name'] ?? 'Unknown',
+                      'house_no': userData?['house_no'] ?? 'N/A',
+                      'phone': userData?['phone'] ?? 'N/A',
                     }),
                     version: QrVersions.auto,
                     size: 180,
                     backgroundColor: Colors.white,
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    "Show this at the society gate for entry",
-                    style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 40),
-
-            // Logout Button
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () async {
-                  await FirebaseAuth.instance.signOut();
-                  Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(builder: (_) => const LoginScreen()),
-                        (route) => false,
-                  );
-                },
-                icon: const Icon(Icons.logout),
-                label: const Text("Logout"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
                 ),
-              ),
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.info_outline_rounded,
+                        size: 14, color: Colors.grey[500]),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Show this at the society gate for entry',
+                      style:
+                          TextStyle(color: Colors.grey[500], fontSize: 12),
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+  }
+
+  Future<void> _logout() async {
+    await FirebaseAuth.instance.signOut();
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
     );
   }
 }
 
-/// Simple reusable InfoRow widget
+// ── Helper data class ────────────────────────────────────────────────
+class _InfoEntry {
+  final String label;
+  final String value;
+  final IconData icon;
+  const _InfoEntry(this.label, this.value, this.icon);
+}
+
+/// Simple reusable InfoRow widget (kept for backward compatibility)
 class InfoRow extends StatelessWidget {
   final String label;
   final String value;
@@ -209,11 +393,16 @@ class InfoRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.black87)),
-          Flexible(child: Text(value, style: const TextStyle(color: Colors.grey))),
+          Text(label,
+              style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textPrimary)),
+          Flexible(
+              child: Text(value,
+                  style:
+                      const TextStyle(color: AppColors.textSecondary))),
         ],
       ),
     );
   }
 }
-

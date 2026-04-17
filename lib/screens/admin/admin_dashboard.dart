@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:rms_app/screens/admin/admin_profile_screen.dart';
 import 'package:rms_app/screens/admin/members_screen.dart';
+import 'package:rms_app/theme/app_theme.dart';
 import 'admin_pay_screen.dart';
 import 'admin_issues.dart';
 import 'admin_expense.dart';
@@ -17,20 +18,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
   int _selectedIndex = 1;
 
   final List<Widget> _screens = [
-    MembersScreen(), // optional - if you later add member list
+    MembersScreen(),
     AdminPayScreen(),
     AdminIssuesScreen(),
     AdminExpenseScreen(),
     AdminNoticesScreen(),
     AdminProfileScreen(),
-  ];
-
-  final List<String> _titles = [
-    "Members",
-    "Payments",
-    "Issues",
-    "Expense",
-    "Notices"
   ];
 
   void _onItemTapped(int index) {
@@ -43,32 +36,55 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: _screens[_selectedIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: _selectedIndex,
-        onTap: _onItemTapped,
-        selectedItemColor: Colors.black,
-        unselectedItemColor: Colors.grey,
-        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.people_alt_outlined), label: "Members"),
-          BottomNavigationBarItem(icon: Icon(Icons.credit_card_outlined), label: "Payments"),
-          BottomNavigationBarItem(icon: Icon(Icons.report_problem_outlined), label: "Issues"),
-          BottomNavigationBarItem(icon: Icon(Icons.receipt_long_outlined), label: "Expense"),
-          BottomNavigationBarItem(icon: Icon(Icons.notifications_none_outlined), label: "Notices"),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: "Profile")
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: _onItemTapped,
+        backgroundColor: Colors.white,
+        indicatorColor: AppColors.primaryLight,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.people_alt_outlined),
+            selectedIcon: Icon(Icons.people_alt_rounded, color: AppColors.primary),
+            label: 'Members',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.credit_card_outlined),
+            selectedIcon: Icon(Icons.credit_card_rounded, color: AppColors.primary),
+            label: 'Payments',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.report_problem_outlined),
+            selectedIcon: Icon(Icons.report_problem_rounded, color: AppColors.primary),
+            label: 'Issues',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.receipt_long_outlined),
+            selectedIcon: Icon(Icons.receipt_long_rounded, color: AppColors.primary),
+            label: 'Expense',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.notifications_none_outlined),
+            selectedIcon: Icon(Icons.notifications_rounded, color: AppColors.primary),
+            label: 'Notices',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline_rounded),
+            selectedIcon: Icon(Icons.person_rounded, color: AppColors.primary),
+            label: 'Profile',
+          ),
         ],
       ),
     );
   }
 }
 
-// Optional placeholder (if you don’t have it yet)
+// Optional placeholder
 class AdminMembersScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
+      backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text("Admin Portal")),
       body: const Center(child: Text("Members Dashboard Coming Soon")),
     );

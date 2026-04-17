@@ -48,13 +48,18 @@ class MyApp extends StatelessWidget {
           .get();
 
       if (snapshot.docs.isNotEmpty) {
-        final role = snapshot.docs.first['role'] ?? 'user';
+        final doc = snapshot.docs.first;
+        final role = doc['role'] ?? 'user';
         debugPrint("🔹 Logged in user role: $role");
 
         if (role == 'admin') {
           return const AdminDashboard();
         } else {
-          final userData = snapshot.docs.first.data();
+          // Include the Firestore document ID so invoice queries use the correct UID
+          final userData = {
+            ...doc.data(),
+            'firestoreDocId': doc.id,
+          };
           return Dashboard(userData: userData);
         }
       } else {

@@ -10,6 +10,67 @@ class MembersScreen extends StatefulWidget {
 }
 
 class _MembersScreenState extends State<MembersScreen> {
+  String _monthKey() {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}';
+  }
+
+  Widget _invoiceStatusChip(String? status) {
+    Color bg;
+    Color fg;
+    IconData icon;
+    String label;
+
+    switch (status) {
+      case 'PAID':
+        bg = const Color(0xFFD1FAE5);
+        fg = const Color(0xFF065F46);
+        icon = Icons.check_circle_outline;
+        label = 'Paid';
+        break;
+      case 'PARTIAL':
+        bg = const Color(0xFFFEF3C7);
+        fg = const Color(0xFF92400E);
+        icon = Icons.remove_circle_outline;
+        label = 'Partial';
+        break;
+      case 'SUBMITTED':
+        bg = const Color(0xFFE0E7FF);
+        fg = const Color(0xFF3730A3);
+        icon = Icons.hourglass_empty_rounded;
+        label = 'Review';
+        break;
+      case 'UNPAID':
+        bg = const Color(0xFFFFE4E6);
+        fg = const Color(0xFF9F1239);
+        icon = Icons.cancel_outlined;
+        label = 'Unpaid';
+        break;
+      default:
+        bg = const Color(0xFFF1F5F9);
+        fg = const Color(0xFF64748B);
+        icon = Icons.help_outline;
+        label = 'No Bill';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: fg),
+          const SizedBox(width: 4),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 11, fontWeight: FontWeight.w600, color: fg)),
+        ],
+      ),
+    );
+  }
   // 🔹 Add new member to Firestore
   Future<void> _addMemberToFirestore(Map<String, String> memberData) async {
     try {
@@ -53,12 +114,14 @@ class _MembersScreenState extends State<MembersScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
+      backgroundColor: const Color(0xFFF0F4FF),
       appBar: AppBar(
-        title: const Text("Admin Portal",
+        title: const Text("Members",
             style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF0F172A),
+        elevation: 0,
+        surfaceTintColor: Colors.white,
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
@@ -105,65 +168,87 @@ class _MembersScreenState extends State<MembersScreen> {
             ),
             const SizedBox(height: 10),
 
-            // 🔹 Real-time Firestore user list
+            // 🔹 Real-time Firestore user list with invoice status
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance
-                    .collection('users')
-                    .orderBy('created_at', descending: true)
+                    .collection('invoices')
+                    .where('month', isEqualTo: _monthKey())
                     .snapshots(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                    return const Center(child: Text("No members found."));
+                builder: (context, invoiceSnap) {
+                  // Build uid → invoice status map from current month
+                  final Map<String, String> invoiceStatusMap = {};
+                  if (invoiceSnap.hasData) {
+                    for (final doc in invoiceSnap.data!.docs) {
+                      final d = doc.data() as Map<String, dynamic>;
+                      final uid = d['uid'] as String? ?? '';
+                      final status = d['status'] as String? ?? 'UNPAID';
+                      if (uid.isNotEmpty) invoiceStatusMap[uid] = status;
+                    }
                   }
 
-                  final users = snapshot.data!.docs;
+                  return StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('users')
+                        .orderBy('created_at', descending: true)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                        return const Center(child: Text("No members found."));
+                      }
 
-                  return SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: SingleChildScrollView(
-                      child: DataTable(
-                        headingRowColor: MaterialStateProperty.all(
-                            const Color(0xFFF4F6F8)),
-                        columns: const [
-                          DataColumn(
-                              label: Text("Full Name",
-                                  style:
-                                  TextStyle(fontWeight: FontWeight.bold))),
-                          DataColumn(
-                              label: Text("Unit No.",
-                                  style:
-                                  TextStyle(fontWeight: FontWeight.bold))),
-                          DataColumn(
-                              label: Text("Email",
-                                  style:
-                                  TextStyle(fontWeight: FontWeight.bold))),
-                          DataColumn(
-                              label: Text("Phone",
-                                  style:
-                                  TextStyle(fontWeight: FontWeight.bold))),
-                          DataColumn(
-                              label: Text("Status",
-                                  style:
-                                  TextStyle(fontWeight: FontWeight.bold))),
-                        ],
-                        rows: users.map((doc) {
-                          final data = doc.data() as Map<String, dynamic>;
-                          return DataRow(
-                            cells: [
-                              DataCell(Text(data['name'] ?? '')),
-                              DataCell(Text(data['house_no'] ?? '')),
-                              DataCell(Text(data['email'] ?? '')),
-                              DataCell(Text(data['phone'] ?? '')),
-                              DataCell(Text(data['maintenance_status'] ?? '')),
+                      final users = snapshot.data!.docs;
+
+                      return SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: SingleChildScrollView(
+                          child: DataTable(
+                            headingRowColor: MaterialStateProperty.all(
+                                const Color(0xFFF4F6F8)),
+                            columns: const [
+                              DataColumn(
+                                  label: Text("Full Name",
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold))),
+                              DataColumn(
+                                  label: Text("Unit No.",
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold))),
+                              DataColumn(
+                                  label: Text("Email",
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold))),
+                              DataColumn(
+                                  label: Text("Phone",
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold))),
+                              DataColumn(
+                                  label: Text("This Month",
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold))),
                             ],
-                          );
-                        }).toList(),
-                      ),
-                    ),
+                            rows: users.map((doc) {
+                              final data =
+                                  doc.data() as Map<String, dynamic>;
+                              final invStatus =
+                                  invoiceStatusMap[doc.id]; // null = no invoice
+                              return DataRow(
+                                cells: [
+                                  DataCell(Text(data['name'] ?? '')),
+                                  DataCell(Text(data['house_no'] ?? '')),
+                                  DataCell(Text(data['email'] ?? '')),
+                                  DataCell(Text(data['phone'] ?? '')),
+                                  DataCell(_invoiceStatusChip(invStatus)),
+                                ],
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      );
+                    },
                   );
                 },
               ),

@@ -42,11 +42,13 @@ class _AdminExpenseScreenState extends State<AdminExpenseScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
+      backgroundColor: const Color(0xFFF0F4FF),
       appBar: AppBar(
-        title: const Text("Admin Portal", style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
+        title: const Text("Expense Manager", style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF0F172A),
+        elevation: 0,
+        surfaceTintColor: Colors.white,
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
