@@ -538,8 +538,11 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
     final proofUrl = (m['proof_url'] ?? '').toString();
     final note = (m['note'] ?? '').toString().trim();
     final invoiceId = (m['invoice_id'] ?? '').toString();
+    final purpose = (m['purpose'] ?? '').toString().trim();
+    final invoiceType = (m['invoice_type'] ?? 'MAINTENANCE').toString();
     final statusColor = _statusColor(status);
     final isThisLoading = _loadingPaymentId == d.id;
+    final isDemand = invoiceType == 'DEMAND';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -586,31 +589,40 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
               ],
             ),
 
-            // ── Invoice badge ───────────────────────────────────
-            if (invoiceId.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryLight,
-                  borderRadius: BorderRadius.circular(8),
+            // ── Purpose / invoice type badge ────────────────────
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: isDemand ? const Color(0xFFF3E8FF) : AppColors.primaryLight,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isDemand ? Icons.request_quote_rounded : Icons.receipt_long_rounded,
+                        size: 13,
+                        color: isDemand ? const Color(0xFF8B5CF6) : AppColors.primary,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        isDemand
+                            ? (purpose.isNotEmpty ? purpose : 'Demand Due')
+                            : 'Monthly Maintenance',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDemand ? const Color(0xFF8B5CF6) : AppColors.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.receipt_long_rounded,
-                        size: 13, color: AppColors.primary),
-                    const SizedBox(width: 5),
-                    Text('Monthly Invoice Payment',
-                        style: const TextStyle(
-                            fontSize: 11,
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w600)),
-                  ],
-                ),
-              ),
-            ],
+              ],
+            ),
 
             // ── Transaction info ────────────────────────────────
             const SizedBox(height: 10),

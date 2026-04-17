@@ -10,15 +10,21 @@ import 'receipt_pdf_service.dart';
 
 class UserPayScreen extends StatefulWidget {
   /// When opened from the dashboard due card, these are pre-populated.
-  final String? invoiceId;       // Firestore invoices/{id}
-  final int? prefilledAmount;    // remaining amount to pay
-  final String? monthLabel;      // e.g. "April 2026"
+  final String? invoiceId;          // Firestore invoices/{id}
+  final int? prefilledAmount;       // remaining amount to pay
+  final String? monthLabel;         // e.g. "April 2026"
+  final String? invoiceTitle;       // e.g. "Society Painting Q2 2026"
+  final String? invoiceDescription; // detail description
+  final String? invoiceType;        // "MAINTENANCE" | "DEMAND"
 
   const UserPayScreen({
     super.key,
     this.invoiceId,
     this.prefilledAmount,
     this.monthLabel,
+    this.invoiceTitle,
+    this.invoiceDescription,
+    this.invoiceType,
   });
 
   @override
@@ -107,6 +113,11 @@ class _UserPayScreenState extends State<UserPayScreen> {
     final houseNo = (userData['house_no'] ?? '').toString();
 
     try {
+      final invoiceType = widget.invoiceType ?? 'MAINTENANCE';
+      final purpose = widget.invoiceTitle?.isNotEmpty == true
+          ? widget.invoiceTitle!
+          : (invoiceType == 'DEMAND' ? 'Special Due' : 'Monthly Maintenance');
+
       final payRef =
           await FirebaseFirestore.instance.collection('payments').add({
         'uid': user!.uid,
@@ -117,7 +128,8 @@ class _UserPayScreenState extends State<UserPayScreen> {
         'house_no': houseNo,
         'method': method,
         'note': noteCtrl.text.trim(),
-        // Links this payment to the specific monthly invoice (null if ad-hoc)
+        'invoice_type': invoiceType,
+        'purpose': purpose,
         if (widget.invoiceId != null) 'invoice_id': widget.invoiceId,
       });
 
@@ -134,6 +146,55 @@ class _UserPayScreenState extends State<UserPayScreen> {
     } catch (e) {
       _showSnack('Failed: $e', isError: true);
     }
+  }
+
+  Widget _buildInvoiceBanner(String name) {
+    final isDemand = widget.invoiceType == 'DEMAND';
+    final title = widget.invoiceTitle?.isNotEmpty == true
+        ? widget.invoiceTitle!
+        : (isDemand ? 'Special Due' : 'Monthly Maintenance');
+    final subtitle = widget.invoiceDescription?.isNotEmpty == true
+        ? widget.invoiceDescription!
+        : (isDemand ? '' : widget.monthLabel ?? '');
+
+    final gradColors = isDemand
+        ? const [Color(0xFF7C3AED), Color(0xFF8B5CF6)]
+        : const [Color(0xFF1A56DB), Color(0xFF3B82F6)];
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: gradColors, begin: Alignment.topLeft, end: Alignment.bottomRight),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: AppTheme.primaryShadow,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 44, height: 44,
+            decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(12)),
+            child: Icon(isDemand ? Icons.request_quote_rounded : Icons.receipt_long_rounded, color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 12)),
+                ],
+                const SizedBox(height: 4),
+                Text('₹${widget.prefilledAmount ?? 0} due  •  $name',
+                    style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 12, fontWeight: FontWeight.w500)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showSnack(String msg, {bool isError = false}) {
@@ -182,54 +243,7 @@ class _UserPayScreenState extends State<UserPayScreen> {
         children: [
           // ── Invoice context banner (when opened from a due card) ─
           if (widget.invoiceId != null) ...[
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF1A56DB), Color(0xFF3B82F6)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: AppTheme.primaryShadow,
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.receipt_long_rounded,
-                        color: Colors.white, size: 22),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Monthly Maintenance — ${widget.monthLabel ?? ''}',
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '₹${widget.prefilledAmount ?? 1500} due  •  $name',
-                          style: TextStyle(
-                              color: Colors.white.withOpacity(0.8),
-                              fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            _buildInvoiceBanner(name),
             const SizedBox(height: 16),
           ],
 

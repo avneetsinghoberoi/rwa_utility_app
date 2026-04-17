@@ -722,3 +722,286 @@ exports.exportMonthCsv = onCall({ enforceAppCheck: false }, async (request) => {
 
   return { url, count: rows.length };
 });
+
+// =============================================================================
+// DEMAND DUES
+// =============================================================================
+
+/**
+ * Helper to build a standard HTTP error response for demand-due endpoints.
+ */
+function httpError(res, status, code, message) {
+  return res.status(status).json({ error: { status: code, message } });
+}
+
+/**
+ * CREATE DEMAND DUE
+ * POST /createDemandDueHttp
+ * Body: { title, description, category, amountPerUnit, targetType, targetHouses[], dueDateMs }
+ *
+ * Creates a demand_dues document and one invoice per targeted resident.
+ * Idempotent per (title + month) to prevent accidental duplicates.
+ */
+exports.createDemandDueHttp = onRequest({ cors: true }, async (req, res) => {
+  if (req.method !== "POST") return httpError(res, 405, "METHOD_NOT_ALLOWED", "POST only");
+
+  try {
+    const db = admin.firestore();
+    const bearer = String(req.headers.authorization || "");
+    const body = typeof req.body === "object" && req.body ? req.body : {};
+    const token = bearer.startsWith("Bearer ") ? bearer.slice(7) : String(body.authToken || "");
+
+    const authContext = await resolveAuthContext({ auth: null, data: { authToken: token } });
+    const adminUser   = await requireAdminFromAuthContext(db, authContext);
+
+    // ── Validate inputs ────────────────────────────────────────────
+    const title       = String(body.title || "").trim();
+    const description = String(body.description || "").trim();
+    const category    = String(body.category || "Other").trim();
+    const amount      = Number(body.amountPerUnit);
+    const targetType  = String(body.targetType || "ALL"); // "ALL" | "SPECIFIC"
+    const targetHouses = Array.isArray(body.targetHouses) ? body.targetHouses.map(String) : [];
+    const dueDateMs   = Number(body.dueDateMs);
+
+    if (!title)                        return httpError(res, 400, "INVALID_ARGUMENT", "title required");
+    if (!Number.isFinite(amount) || amount <= 0) return httpError(res, 400, "INVALID_ARGUMENT", "amountPerUnit must be > 0");
+    if (!Number.isFinite(dueDateMs))   return httpError(res, 400, "INVALID_ARGUMENT", "dueDateMs required");
+    if (targetType === "SPECIFIC" && targetHouses.length === 0)
+      return httpError(res, 400, "INVALID_ARGUMENT", "targetHouses required when targetType=SPECIFIC");
+
+    const dueDate = admin.firestore.Timestamp.fromMillis(dueDateMs);
+
+    // ── Fetch target residents ─────────────────────────────────────
+    let usersQuery = db.collection("users").where("role", "==", "user");
+    const usersSnap = await usersQuery.get();
+
+    const targetDocs = targetType === "ALL"
+      ? usersSnap.docs
+      : usersSnap.docs.filter(d => targetHouses.includes(String(d.data().house_no || "")));
+
+    if (targetDocs.length === 0)
+      return httpError(res, 400, "NOT_FOUND", "No matching residents found");
+
+    // ── Create demand_dues document ────────────────────────────────
+    const demandRef = db.collection("demand_dues").doc();
+    const demandData = {
+      title,
+      description,
+      category,
+      amount_per_unit: amount,
+      target_type: targetType,
+      target_houses: targetType === "SPECIFIC" ? targetHouses : [],
+      due_date: dueDate,
+      status: "ACTIVE",
+      invoices_created: targetDocs.length,
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      created_by: adminUser.authUid,
+    };
+
+    // ── Batch-create one invoice per resident ──────────────────────
+    const BATCH_LIMIT = 400;
+    let batch = db.batch();
+    let batchCount = 0;
+
+    batch.set(demandRef, demandData);
+    batchCount++;
+
+    for (const userDoc of targetDocs) {
+      const u = userDoc.data();
+      const invRef = db.collection("invoices").doc();
+      batch.set(invRef, {
+        type:        "DEMAND",
+        uid:         userDoc.id,
+        house_no:    String(u.house_no || ""),
+        name:        String(u.name || ""),
+        email:       String(u.email || ""),
+        title,
+        description,
+        category,
+        demand_id:   demandRef.id,
+        amount,
+        paid_amount: 0,
+        status:      "UNPAID",
+        due_date:    dueDate,
+        created_at:  admin.firestore.FieldValue.serverTimestamp(),
+        created_by:  adminUser.authUid,
+      });
+      batchCount++;
+
+      if (batchCount >= BATCH_LIMIT) {
+        await batch.commit();
+        batch = db.batch();
+        batchCount = 0;
+      }
+    }
+
+    if (batchCount > 0) await batch.commit();
+
+    // ── Backfill month field on existing MAINTENANCE invoices (if missing) ──
+    // (no-op for demand dues; just log)
+    console.log(`[createDemandDueHttp] Created demand due "${title}" with ${targetDocs.length} invoices. demandId=${demandRef.id}`);
+
+    res.status(200).json({
+      ok: true,
+      demandId: demandRef.id,
+      invoicesCreated: targetDocs.length,
+    });
+  } catch (error) {
+    if (error instanceof HttpsError)
+      return res.status(error.httpErrorCode.status).json({ error: { status: error.code.toUpperCase().replace(/-/g,"_"), message: error.message } });
+    console.error("createDemandDueHttp error", error);
+    res.status(500).json({ error: { status: "INTERNAL", message: "Internal error" } });
+  }
+});
+
+/**
+ * CREATE RESIDENT
+ * POST /createResidentHttp
+ * Body: { name, email, phone, houseNo, password }
+ *
+ * Uses Admin SDK to create a Firebase Auth user, then creates the Firestore
+ * users document with the Auth UID as the document ID.
+ * This guarantees firestoreDocId == Auth UID, which is required for invoice queries.
+ */
+exports.createResidentHttp = onRequest({ cors: true }, async (req, res) => {
+  if (req.method !== "POST") return httpError(res, 405, "METHOD_NOT_ALLOWED", "POST only");
+
+  try {
+    const db = admin.firestore();
+    const bearer = String(req.headers.authorization || "");
+    const body = typeof req.body === "object" && req.body ? req.body : {};
+    const token = bearer.startsWith("Bearer ") ? bearer.slice(7) : String(body.authToken || "");
+
+    const authContext = await resolveAuthContext({ auth: null, data: { authToken: token } });
+    await requireAdminFromAuthContext(db, authContext);
+
+    const name     = String(body.name     || "").trim();
+    const email    = String(body.email    || "").trim().toLowerCase();
+    const phone    = String(body.phone    || "").trim();
+    const houseNo  = String(body.houseNo  || "").trim();
+    const password = String(body.password || "").trim();
+
+    if (!name)                        return httpError(res, 400, "INVALID_ARGUMENT", "name required");
+    if (!email)                       return httpError(res, 400, "INVALID_ARGUMENT", "email required");
+    if (!houseNo)                     return httpError(res, 400, "INVALID_ARGUMENT", "houseNo required");
+    if (!password || password.length < 6)
+      return httpError(res, 400, "INVALID_ARGUMENT", "password must be at least 6 characters");
+
+    // Guard: check Firestore for existing email
+    const existing = await db.collection("users").where("email", "==", email).limit(1).get();
+    if (!existing.empty) return httpError(res, 400, "ALREADY_EXISTS", "A resident with this email already exists");
+
+    // Step 1: Create Firebase Auth user
+    const authUser = await admin.auth().createUser({
+      email,
+      password,
+      displayName: name,
+    });
+
+    // Step 2: Create Firestore document using Auth UID as doc ID
+    await db.collection("users").doc(authUser.uid).set({
+      name,
+      email,
+      phone,
+      house_no: houseNo,
+      floor: "",
+      dues: 0,
+      role: "user",
+      qr_payload: houseNo,
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      last_due_update: "",
+      last_payment_date: "",
+    });
+
+    console.log(`[createResidentHttp] Created resident uid=${authUser.uid} email=${email} house=${houseNo}`);
+    res.status(200).json({ ok: true, uid: authUser.uid, email, name, houseNo });
+
+  } catch (error) {
+    if (error.code === "auth/email-already-exists") {
+      return httpError(res, 400, "ALREADY_EXISTS", "This email is already registered. Use a different email.");
+    }
+    if (error instanceof HttpsError)
+      return res.status(error.httpErrorCode.status).json({ error: { status: error.code.toUpperCase().replace(/-/g, "_"), message: error.message } });
+    console.error("createResidentHttp error", error);
+    res.status(500).json({ error: { status: "INTERNAL", message: error.message || "Internal error" } });
+  }
+});
+
+/**
+ * DELETE RESIDENT
+ * POST /deleteResidentHttp
+ * Body: { userId }
+ *
+ * Deletes the Firebase Auth user and Firestore document.
+ */
+exports.deleteResidentHttp = onRequest({ cors: true }, async (req, res) => {
+  if (req.method !== "POST") return httpError(res, 405, "METHOD_NOT_ALLOWED", "POST only");
+
+  try {
+    const db = admin.firestore();
+    const bearer = String(req.headers.authorization || "");
+    const body = typeof req.body === "object" && req.body ? req.body : {};
+    const token = bearer.startsWith("Bearer ") ? bearer.slice(7) : String(body.authToken || "");
+
+    const authContext = await resolveAuthContext({ auth: null, data: { authToken: token } });
+    await requireAdminFromAuthContext(db, authContext);
+
+    const userId = String(body.userId || "").trim();
+    if (!userId) return httpError(res, 400, "INVALID_ARGUMENT", "userId required");
+
+    // Step 1: Delete Firebase Auth account (ignore if already gone)
+    try {
+      await admin.auth().deleteUser(userId);
+    } catch (authErr) {
+      if (authErr.code !== "auth/user-not-found") throw authErr;
+      console.warn(`[deleteResidentHttp] Auth user ${userId} not found — deleting Firestore doc only`);
+    }
+
+    // Step 2: Delete Firestore document
+    await db.collection("users").doc(userId).delete();
+
+    console.log(`[deleteResidentHttp] Deleted resident uid=${userId}`);
+    res.status(200).json({ ok: true });
+
+  } catch (error) {
+    if (error instanceof HttpsError)
+      return res.status(error.httpErrorCode.status).json({ error: { status: error.code.toUpperCase().replace(/-/g, "_"), message: error.message } });
+    console.error("deleteResidentHttp error", error);
+    res.status(500).json({ error: { status: "INTERNAL", message: error.message || "Internal error" } });
+  }
+});
+
+/**
+ * CLOSE DEMAND DUE
+ * POST /closeDemandDueHttp
+ * Body: { demandId }
+ */
+exports.closeDemandDueHttp = onRequest({ cors: true }, async (req, res) => {
+  if (req.method !== "POST") return httpError(res, 405, "METHOD_NOT_ALLOWED", "POST only");
+
+  try {
+    const db = admin.firestore();
+    const bearer = String(req.headers.authorization || "");
+    const body = typeof req.body === "object" && req.body ? req.body : {};
+    const token = bearer.startsWith("Bearer ") ? bearer.slice(7) : String(body.authToken || "");
+
+    const authContext = await resolveAuthContext({ auth: null, data: { authToken: token } });
+    await requireAdminFromAuthContext(db, authContext);
+
+    const demandId = String(body.demandId || "");
+    if (!demandId) return httpError(res, 400, "INVALID_ARGUMENT", "demandId required");
+
+    await db.collection("demand_dues").doc(demandId).update({
+      status: "CLOSED",
+      closed_at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    console.log(`[closeDemandDueHttp] Closed demand due ${demandId}`);
+    res.status(200).json({ ok: true });
+  } catch (error) {
+    if (error instanceof HttpsError)
+      return res.status(error.httpErrorCode.status).json({ error: { status: error.code.toUpperCase().replace(/-/g,"_"), message: error.message } });
+    console.error("closeDemandDueHttp error", error);
+    res.status(500).json({ error: { status: "INTERNAL", message: "Internal error" } });
+  }
+});

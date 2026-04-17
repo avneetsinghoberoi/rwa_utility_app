@@ -152,8 +152,10 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── Maintenance card ─────────────────────────
-                  _buildMaintenanceCard(context, houseNo),
+                  // ── All pending dues ─────────────────────────
+                  AppTheme.sectionHeader('Your Dues', emoji: '💳'),
+                  const SizedBox(height: 12),
+                  _buildAllDuesSection(context),
                   const SizedBox(height: 22),
 
                   // ── Quick access ──────────────────────────────
@@ -182,18 +184,11 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     );
   }
 
-  // ── Maintenance Card (live from Firestore invoices) ─────────────
-  Widget _buildMaintenanceCard(BuildContext context, String houseNo) {
+  // ── All Dues Section ─────────────────────────────────────────────
+  Widget _buildAllDuesSection(BuildContext context) {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) return const SizedBox.shrink();
 
-    final now = DateTime.now();
-    final month =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}'; // e.g. "2026-04"
-
-    // Use the Firestore document ID (not Firebase Auth UID) because invoices
-    // are created with uid = userDoc.id (Firestore doc ID), which may differ
-    // from the Firebase Auth UID for users created manually by an admin.
     final firestoreDocId =
         (widget.userData['firestoreDocId'] as String?)?.isNotEmpty == true
             ? widget.userData['firestoreDocId'] as String
@@ -203,227 +198,219 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
       stream: FirebaseFirestore.instance
           .collection('invoices')
           .where('uid', isEqualTo: firestoreDocId)
-          .where('month', isEqualTo: month)
-          .limit(1)
+          .where('status', whereIn: ['UNPAID', 'PARTIAL', 'SUBMITTED'])
           .snapshots(),
       builder: (context, snap) {
-        // ── Loading ──────────────────────────────────────────────
         if (snap.connectionState == ConnectionState.waiting) {
-          return _maintenanceShimmer();
+          return _shimmerCard();
         }
 
-        // ── No invoice yet (admin hasn't generated this month's dues) ─
-        if (!snap.hasData || snap.data!.docs.isEmpty) {
-          return _maintenanceInfoCard(
-            icon: Icons.hourglass_empty_rounded,
-            iconColor: AppColors.textSecondary,
-            bgGradient: const LinearGradient(
-              colors: [Color(0xFF64748B), Color(0xFF94A3B8)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+        final docs = snap.data?.docs ?? [];
+
+        if (docs.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF059669), Color(0xFF10B981)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [BoxShadow(color: AppColors.success.withOpacity(0.25), blurRadius: 20, offset: const Offset(0, 8))],
             ),
-            title: 'No dues for this month',
-            subtitle: 'House No: $houseNo',
-            action: null,
+            child: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 36),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('All clear! 🎉', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                      Text('No pending dues for House ${widget.userData['house_no'] ?? ''}',
+                          style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           );
         }
 
-        final doc = snap.data!.docs.first;
-        final inv = doc.data() as Map<String, dynamic>;
-        final status = (inv['status'] ?? 'UNPAID').toString();
-        final totalAmt = (inv['amount'] ?? 1500) as num;
-        final paidAmt = (inv['paid_amount'] ?? 0) as num;
-        final remaining = (totalAmt - paidAmt).clamp(0, totalAmt);
-        final invoiceId = doc.id;
+        // Sort: UNPAID first, then PARTIAL, then SUBMITTED; within each group by due_date ascending
+        final sorted = [...docs];
+        const order = {'UNPAID': 0, 'PARTIAL': 1, 'SUBMITTED': 2};
+        sorted.sort((a, b) {
+          final am = a.data() as Map<String, dynamic>;
+          final bm = b.data() as Map<String, dynamic>;
+          final aOrder = order[am['status']] ?? 3;
+          final bOrder = order[bm['status']] ?? 3;
+          if (aOrder != bOrder) return aOrder.compareTo(bOrder);
+          final aDate = am['due_date'] is Timestamp ? (am['due_date'] as Timestamp).millisecondsSinceEpoch : 0;
+          final bDate = bm['due_date'] is Timestamp ? (bm['due_date'] as Timestamp).millisecondsSinceEpoch : 0;
+          return aDate.compareTo(bDate);
+        });
 
-        // ── PAID ─────────────────────────────────────────────────
-        if (status == 'PAID') {
-          return _maintenanceInfoCard(
-            icon: Icons.check_circle_rounded,
-            iconColor: Colors.white,
-            bgGradient: const LinearGradient(
-              colors: [Color(0xFF059669), Color(0xFF10B981)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            title: 'All paid for this month! 🎉',
-            subtitle: '₹${NumberFormat('#,##0').format(totalAmt)} cleared  •  House No: $houseNo',
-            action: null,
-          );
-        }
+        return Column(
+          children: sorted.map((doc) => _dueCard(context, doc)).toList(),
+        );
+      },
+    );
+  }
 
-        // ── SUBMITTED (under review) ──────────────────────────────
-        if (status == 'SUBMITTED') {
-          return _maintenanceInfoCard(
-            icon: Icons.pending_actions_rounded,
-            iconColor: Colors.white,
-            bgGradient: const LinearGradient(
-              colors: [Color(0xFFD97706), Color(0xFFF59E0B)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            title: 'Payment under review',
-            subtitle: '₹${NumberFormat('#,##0').format(remaining)} pending admin verification',
-            action: null,
-          );
-        }
+  Widget _dueCard(BuildContext context, QueryDocumentSnapshot doc) {
+    final inv       = doc.data() as Map<String, dynamic>;
+    final status    = inv['status']?.toString() ?? 'UNPAID';
+    final type      = inv['type']?.toString() ?? 'MAINTENANCE';
+    final title     = inv['title']?.toString() ?? (type == 'DEMAND' ? 'Special Due' : 'Monthly Maintenance');
+    final desc      = inv['description']?.toString() ?? '';
+    final amount    = (inv['amount'] as num?)?.toInt() ?? 1500;
+    final paidAmt   = (inv['paid_amount'] as num?)?.toInt() ?? 0;
+    final remaining = (amount - paidAmt).clamp(0, amount);
+    final rawDate   = inv['due_date'];
+    final dueDate   = rawDate is Timestamp ? rawDate.toDate() : null;
+    final month     = inv['month']?.toString() ?? '';
+    final isDemand  = type == 'DEMAND';
+    final isOverdue = dueDate != null && dueDate.isBefore(DateTime.now()) && status != 'SUBMITTED';
 
-        // ── UNPAID or PARTIAL ─────────────────────────────────────
-        final isPartial = status == 'PARTIAL';
-        return Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF1A56DB), Color(0xFF3B82F6)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: AppTheme.primaryShadow,
+    // Colors
+    final Color accentColor;
+    final List<Color> gradColors;
+    if (status == 'SUBMITTED') {
+      accentColor = AppColors.warning;
+      gradColors  = [const Color(0xFFD97706), const Color(0xFFF59E0B)];
+    } else if (isOverdue) {
+      accentColor = AppColors.error;
+      gradColors  = [const Color(0xFFDC2626), const Color(0xFFEF4444)];
+    } else if (isDemand) {
+      accentColor = const Color(0xFF8B5CF6);
+      gradColors  = [const Color(0xFF7C3AED), const Color(0xFF8B5CF6)];
+    } else {
+      accentColor = AppColors.primary;
+      gradColors  = [const Color(0xFF1A56DB), const Color(0xFF3B82F6)];
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: gradColors, begin: Alignment.topLeft, end: Alignment.bottomRight),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: accentColor.withOpacity(0.28), blurRadius: 16, offset: const Offset(0, 6))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(20)),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(isDemand ? Icons.request_quote_rounded : Icons.home_outlined, color: Colors.white, size: 12),
+                    const SizedBox(width: 4),
+                    Text(isDemand ? 'Special Due' : 'Monthly Maintenance', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+              if (status == 'SUBMITTED') ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(20)),
+                  child: const Text('Under Review', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+                ),
+              ],
+              if (isOverdue && status != 'SUBMITTED') ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.25), borderRadius: BorderRadius.circular(20)),
+                  child: const Text('OVERDUE', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ],
           ),
-          child: Row(
+          const SizedBox(height: 10),
+          Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+          if (desc.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(desc, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 12)),
+          ],
+          if (!isDemand && month.isNotEmpty)
+            Text(DateFormat('MMMM yyyy').format(DateTime.parse('$month-01')),
+                style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 12)),
+          const SizedBox(height: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isPartial ? 'Partial Payment Remaining' : 'Maintenance Due',
-                      style: TextStyle(
-                          color: Colors.white.withOpacity(0.85), fontSize: 13),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
                       '₹${NumberFormat('#,##0').format(remaining)}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 30,
-                        fontWeight: FontWeight.bold,
-                        height: 1,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold, height: 1),
                     ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Icon(Icons.home_outlined,
-                            color: Colors.white.withOpacity(0.7), size: 13),
-                        const SizedBox(width: 4),
-                        Text(
-                          'House No: $houseNo',
-                          style: TextStyle(
-                              color: Colors.white.withOpacity(0.8),
-                              fontSize: 12),
+                    if (paidAmt > 0)
+                      Text('of ₹${NumberFormat('#,##0').format(amount)}  •  ₹${NumberFormat('#,##0').format(paidAmt)} paid',
+                          style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 11)),
+                    if (dueDate != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          '${isOverdue ? 'Was due' : 'Due by'} ${DateFormat('dd MMM yyyy').format(dueDate)}',
+                          style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 11),
                         ),
-                        if (isPartial) ...[
-                          const SizedBox(width: 8),
-                          Text(
-                            '(of ₹${NumberFormat('#,##0').format(totalAmt)})',
-                            style: TextStyle(
-                                color: Colors.white.withOpacity(0.65),
-                                fontSize: 11),
-                          ),
-                        ],
-                      ],
-                    ),
+                      ),
                   ],
                 ),
               ),
-              const SizedBox(width: 12),
-              ElevatedButton(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => UserPayScreen(
-                      invoiceId: invoiceId,
-                      prefilledAmount: remaining.toInt(),
-                      monthLabel: _monthLabel(now),
+              if (status != 'SUBMITTED')
+                ElevatedButton(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => UserPayScreen(
+                        invoiceId: doc.id,
+                        prefilledAmount: remaining,
+                        monthLabel: isDemand ? title : (month.isNotEmpty ? DateFormat('MMMM yyyy').format(DateTime.parse('$month-01')) : ''),
+                        invoiceTitle: title,
+                        invoiceDescription: desc,
+                        invoiceType: type,
+                      ),
                     ),
                   ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: accentColor,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                  ),
+                  child: Text(
+                    status == 'PARTIAL' ? 'Pay Rest' : 'Pay Now',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
                 ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: AppColors.primary,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 18, vertical: 12),
-                ),
-                child: Text(
-                  isPartial ? 'Pay Rest' : 'Pay Now',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 13),
-                ),
-              ),
             ],
           ),
-        );
-      },
-    );
-  }
-
-  // ── Info variant (paid / submitted / no-due) ────────────────────
-  Widget _maintenanceInfoCard({
-    required IconData icon,
-    required Color iconColor,
-    required LinearGradient bgGradient,
-    required String title,
-    required String subtitle,
-    required Widget? action,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-      decoration: BoxDecoration(
-        gradient: bgGradient,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: iconColor, size: 32),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15)),
-                const SizedBox(height: 4),
-                Text(subtitle,
-                    style: TextStyle(
-                        color: Colors.white.withOpacity(0.8), fontSize: 12)),
-              ],
-            ),
-          ),
-          if (action != null) action,
         ],
       ),
     );
   }
 
-  // ── Skeleton shimmer while loading ──────────────────────────────
-  Widget _maintenanceShimmer() {
+  Widget _shimmerCard() {
     return Container(
-      height: 90,
-      decoration: BoxDecoration(
-        color: AppColors.border,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: const Center(
-        child: SizedBox(
-          width: 24,
-          height: 24,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-      ),
+      height: 120,
+      decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(20)),
+      child: const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))),
     );
   }
 
-  String _monthLabel(DateTime d) {
-    return DateFormat('MMMM yyyy').format(d);
-  }
 
   // ── Quick Access Grid ───────────────────────────────────────────
   Widget _buildQuickAccessGrid(BuildContext context) {

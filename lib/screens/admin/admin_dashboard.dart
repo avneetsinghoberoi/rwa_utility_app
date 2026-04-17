@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:rms_app/screens/admin/admin_profile_screen.dart';
 import 'package:rms_app/screens/admin/members_screen.dart';
 import 'package:rms_app/theme/app_theme.dart';
+import 'admin_dues_screen.dart';
 import 'admin_pay_screen.dart';
 import 'admin_issues.dart';
 import 'admin_expense.dart';
@@ -20,6 +21,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   final List<Widget> _screens = [
     MembersScreen(),
     AdminPayScreen(),
+    AdminDuesScreen(),
     AdminIssuesScreen(),
     AdminExpenseScreen(),
     AdminNoticesScreen(),
@@ -52,6 +54,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
             icon: Icon(Icons.credit_card_outlined),
             selectedIcon: Icon(Icons.credit_card_rounded, color: AppColors.primary),
             label: 'Payments',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.request_quote_outlined),
+            selectedIcon: Icon(Icons.request_quote_rounded, color: AppColors.primary),
+            label: 'Dues',
           ),
           NavigationDestination(
             icon: Icon(Icons.report_problem_outlined),
