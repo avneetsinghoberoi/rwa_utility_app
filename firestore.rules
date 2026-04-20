@@ -1,0 +1,87 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Works when the Firestore document ID == Firebase Auth UID.
+    // New residents created via createResidentHttp always satisfy this.
+    function isAdmin() {
+      return isSignedIn()
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // ── users ─────────────────────────────────────────────────────────────────
+    // Residents can read/update their own doc; admins can read/write all.
+    match /users/{userId} {
+      allow read:   if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow create: if isAdmin();
+      allow update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // ── invoices ──────────────────────────────────────────────────────────────
+    // Residents can read their own invoices; admins can read all.
+    // Writes only via Cloud Functions (Admin SDK bypasses rules).
+    match /invoices/{invoiceId} {
+      allow read: if isSignedIn()
+          && (resource.data.uid == request.auth.uid || isAdmin());
+      allow write: if false; // Cloud Functions only
+    }
+
+    // ── demand_dues ───────────────────────────────────────────────────────────
+    // Admins read; Cloud Functions write.
+    // Residents don't need to read this collection directly — their invoices
+    // already have all the fields (title, description, due_date, etc.).
+    match /demand_dues/{dueId} {
+      allow read:  if isSignedIn(); // any authenticated user (admin UI shows it, residents don't see it)
+      allow write: if false; // Cloud Functions only
+    }
+
+    // ── payments ──────────────────────────────────────────────────────────────
+    // Residents can create and read their own; admins can read all.
+    // Updates (verify/reject) only via Cloud Functions.
+    match /payments/{paymentId} {
+      allow read:   if isSignedIn()
+          && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isSignedIn()
+          && request.resource.data.uid == request.auth.uid;
+      allow update: if false; // Cloud Functions only
+      allow delete: if false;
+    }
+
+    // ── receipts ──────────────────────────────────────────────────────────────
+    match /receipts/{receiptId} {
+      allow read:  if isSignedIn()
+          && (resource.data.uid == request.auth.uid || isAdmin());
+      allow write: if false; // Cloud Functions only
+    }
+
+    // ── notices ───────────────────────────────────────────────────────────────
+    // All residents can read; only admin can create/edit/delete.
+    match /notices/{noticeId} {
+      allow read:  if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ── expenses ──────────────────────────────────────────────────────────────
+    match /expenses/{expenseId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── issues ────────────────────────────────────────────────────────────────
+    // Residents can create and read their own; admins can read/update all.
+    match /issues/{issueId} {
+      allow read:   if isSignedIn()
+          && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isSignedIn();
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+  }
+}

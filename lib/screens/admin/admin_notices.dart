@@ -1,5 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:rms_app/screens/login/login_screen.dart';
 
@@ -215,6 +218,7 @@ class _NewAnnouncementDialogState extends State<NewAnnouncementDialog> {
   final descController = TextEditingController();
   String? selectedType;
   final List<String> types = ["General", "Urgent", "Event", "Maintenance"];
+  static const _base = 'https://us-central1-rms-app-3d585.cloudfunctions.net';
   bool isSubmitting = false;
 
   Future<void> _submitNotice() async {
@@ -222,34 +226,54 @@ class _NewAnnouncementDialogState extends State<NewAnnouncementDialog> {
 
     setState(() => isSubmitting = true);
 
-    final newNotice = {
-      'title': titleController.text.trim(),
-      'description': descController.text.trim(),
-      'type': selectedType ?? "General",
-      'posted_by': "A001", // or current admin ID
-      'date': DateFormat('yyyy-MM-dd').format(DateTime.now()),
-      'created_at': FieldValue.serverTimestamp(),
-    };
-
     try {
-      await FirebaseFirestore.instance.collection('notices').add(newNotice);
+      final user  = FirebaseAuth.instance.currentUser;
+      final token = await user?.getIdToken() ?? '';
+
+      final response = await http.post(
+        Uri.parse('$_base/postNoticeHttp'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'title':       titleController.text.trim(),
+          'description': descController.text.trim(),
+          'type':        selectedType ?? 'General',
+          'posted_by':   user?.email ?? 'Admin',
+        }),
+      );
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+      if (response.statusCode == 200 && data['ok'] == true) {
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Notice posted — residents notified! 🔔"),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        final msg = (data['error']?['message'] ?? 'Unknown error').toString();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Failed: $msg"), backgroundColor: Colors.red),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint("Error posting notice: $e");
       if (mounted) {
-        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("Notice posted successfully!"),
-            backgroundColor: Colors.green,
+            content: Text("Failed to post notice"),
+            backgroundColor: Colors.red,
           ),
         );
       }
-    } catch (e) {
-      print("Error posting notice: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Failed to post notice"),
-          backgroundColor: Colors.red,
-        ),
-      );
     } finally {
       if (mounted) setState(() => isSubmitting = false);
     }

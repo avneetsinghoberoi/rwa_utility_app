@@ -15,7 +15,8 @@
   "dependencies": {
     "csv-writer": "^1.6.0",
     "firebase-admin": "^13.6.1",
-    "firebase-functions": "^7.0.5"
+    "firebase-functions": "^7.0.5",
+    "nodemailer": "^6.9.14"
   },
   "devDependencies": {
     "firebase-functions-test": "^3.1.0"

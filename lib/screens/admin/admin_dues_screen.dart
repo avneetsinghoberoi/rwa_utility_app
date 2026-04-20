@@ -44,21 +44,49 @@ class AdminDuesScreen extends StatelessWidget {
         ],
       ),
       body: StreamBuilder<QuerySnapshot>(
+        // No orderBy here — sorts client-side to avoid needing a Firestore index
         stream: FirebaseFirestore.instance
             .collection('demand_dues')
-            .orderBy('created_at', descending: true)
             .snapshots(),
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
+
+          // Surface any Firestore errors instead of silently showing empty state
+          if (snap.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline_rounded, size: 48, color: AppColors.error),
+                    const SizedBox(height: 12),
+                    const Text('Failed to load dues', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(height: 6),
+                    Text(snap.error.toString(), textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                  ],
+                ),
+              ),
+            );
+          }
+
           if (!snap.hasData || snap.data!.docs.isEmpty) {
             return _emptyState(context);
           }
 
-          final docs = snap.data!.docs;
-          final active   = docs.where((d) => (d.data() as Map)['status'] == 'ACTIVE').toList();
-          final closed   = docs.where((d) => (d.data() as Map)['status'] == 'CLOSED').toList();
+          // Sort client-side: newest first
+          final docs = [...snap.data!.docs];
+          docs.sort((a, b) {
+            final aTs = (a.data() as Map)['created_at'];
+            final bTs = (b.data() as Map)['created_at'];
+            if (aTs is Timestamp && bTs is Timestamp) return bTs.compareTo(aTs);
+            return 0;
+          });
+
+          final active = docs.where((d) => (d.data() as Map)['status'] == 'ACTIVE').toList();
+          final closed = docs.where((d) => (d.data() as Map)['status'] == 'CLOSED').toList();
 
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -416,14 +444,21 @@ class _DemandDueDetailSheet extends StatelessWidget {
             const Divider(height: 1, color: AppColors.divider),
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
+                // No orderBy — sorts client-side to avoid composite index requirement
                 stream: FirebaseFirestore.instance
                     .collection('invoices')
                     .where('demand_id', isEqualTo: demandId)
-                    .orderBy('house_no')
                     .snapshots(),
                 builder: (ctx, snap) {
+                  if (snap.hasError) return Center(child: Text('Error: ${snap.error}', style: const TextStyle(color: AppColors.error)));
                   if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-                  final docs = snap.data!.docs;
+                  // Sort by house_no client-side
+                  final docs = [...snap.data!.docs]
+                    ..sort((a, b) {
+                      final ha = (a.data() as Map)['house_no']?.toString() ?? '';
+                      final hb = (b.data() as Map)['house_no']?.toString() ?? '';
+                      return ha.compareTo(hb);
+                    });
                   if (docs.isEmpty) return const Center(child: Text('No invoices found.'));
 
                   return ListView.separated(

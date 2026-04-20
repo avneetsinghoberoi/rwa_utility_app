@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
+import 'services/notification_service.dart';
 
 // Screens
 import 'screens/login/login_screen.dart';
@@ -22,6 +23,10 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // Initialise FCM push notifications (requests permission, saves token,
+  // registers background handler and foreground listener).
+  await NotificationService.initialize();
 
   runApp(const MyApp());
 }

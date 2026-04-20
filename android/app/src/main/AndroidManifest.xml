@@ -1,5 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Required for push notifications on Android 13+ (API 33+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
     <application
         android:label="rms_app"
         android:name="${applicationName}"
@@ -29,12 +32,15 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
-        <!-- Optional if using Firebase Messaging -->
-        <!--
+        <!-- FCM: use the app icon as the notification icon -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
             android:resource="@mipmap/ic_launcher" />
-        -->
+
+        <!-- FCM: default channel for background notifications -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="rwa_channel" />
     </application>
 
     <queries>

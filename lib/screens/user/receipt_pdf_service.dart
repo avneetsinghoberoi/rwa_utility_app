@@ -6,6 +6,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 class ReceiptPdfService {
   // ── Format a Firestore Timestamp or DateTime as "17 Apr 2026" ─────
@@ -13,7 +14,7 @@ class ReceiptPdfService {
     if (v is Timestamp) return DateFormat('dd MMM yyyy').format(v.toDate());
     if (v is DateTime)  return DateFormat('dd MMM yyyy').format(v);
     if (v is String && v.isNotEmpty) return v;
-    return '—';
+    return '-';
   }
 
   static String _formatCurrency(dynamic v) {
@@ -33,7 +34,14 @@ class ReceiptPdfService {
     // Optionally pass extra invoice data fetched by caller
     Map<String, dynamic>? invoiceData,
   }) async {
-    final pdf = pw.Document();
+    // Noto Sans supports ₹, —, – and all Unicode characters the pdf package
+    // default Helvetica cannot render.
+    final regularFont = await PdfGoogleFonts.notoSansRegular();
+    final boldFont    = await PdfGoogleFonts.notoSansBold();
+
+    final pdf = pw.Document(
+      theme: pw.ThemeData.withFont(base: regularFont, bold: boldFont),
+    );
 
     // ── Pull fields ────────────────────────────────────────────────
     final invoiceType   = (r['invoice_type'] ?? invoiceData?['type'] ?? 'MAINTENANCE').toString();
@@ -177,8 +185,8 @@ class ReceiptPdfService {
                   // ── Resident info ──────────────────────────────
                   _pdfSectionTitle('Resident Details'),
                   pw.SizedBox(height: 8),
-                  _pdfRow('Name', userName.isNotEmpty ? userName : '—'),
-                  _pdfRow('House / Flat', houseNo.isNotEmpty ? houseNo : '—'),
+                  _pdfRow('Name', userName.isNotEmpty ? userName : '-'),
+                  _pdfRow('House / Flat', houseNo.isNotEmpty ? houseNo : '-'),
 
                   pw.SizedBox(height: 20),
 
@@ -189,7 +197,7 @@ class ReceiptPdfService {
                   _pdfRow('Payment Method', methodStr),
                   _pdfRow('Transaction ID / UTR', utr),
                   _pdfRow('Payment Date', paymentDate),
-                  if (dueDate != '—') _pdfRow('Due Date', dueDate),
+                  if (dueDate != '-') _pdfRow('Due Date', dueDate),
 
                   pw.SizedBox(height: 24),
 
@@ -210,7 +218,7 @@ class ReceiptPdfService {
                     ),
                   ),
 
-                  pw.Spacer(),
+                  pw.SizedBox(height: 40),
 
                   // ── Footer ────────────────────────────────────
                   pw.Divider(color: PdfColors.grey300),

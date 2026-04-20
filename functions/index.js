@@ -1,4 +1,6 @@
-const admin = require("firebase-admin");
+const admin      = require("firebase-admin");
+const crypto     = require("crypto");
+const nodemailer = require("nodemailer");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { setGlobalOptions } = require("firebase-functions/v2");
@@ -134,6 +136,21 @@ async function _generateInvoicesForMonth(db, targetMonthKey) {
   if (batchCount > 0) await batch.commit();
 
   console.log(`Generated ${count} invoices for ${targetMonthKey}.`);
+
+  // Notify all residents about their new monthly maintenance invoice (non-fatal)
+  try {
+    const tokens = await getAllResidentFcmTokens(db);
+    const label = monthLabel(new Date(targetMonthKey + "-01"));
+    await sendFcmMulticast(
+      tokens,
+      `🏠 Maintenance Due — ${label}`,
+      `Your monthly maintenance invoice of ₹1500 has been generated.`,
+      { type: "INVOICE_GENERATED", month: targetMonthKey }
+    );
+  } catch (fcmErr) {
+    console.error("[_generateInvoicesForMonth] FCM error (non-fatal):", fcmErr.message);
+  }
+
   return { created: count, skipped: false, month: targetMonthKey };
 }
 
@@ -399,7 +416,7 @@ async function verifyPaymentInternal(db, adminAuthUid, paymentDocId) {
       tx.set(paymentRef, { receipt_id: receiptRef.id }, { merge: true });
     }
 
-    return { allocatedTotal, allocation, newDues };
+    return { allocatedTotal, allocation, newDues, residentUid: userRef.id };
   });
 }
 
@@ -458,6 +475,20 @@ exports.verifyPaymentManualHttp = onRequest({ cors: true }, async (req, res) => 
     });
 
     const result = await verifyPaymentInternal(db, adminUser.authUid, paymentDocId);
+
+    // Notify the resident (non-fatal)
+    try {
+      const tokens = await getFcmTokensForUids(db, [result.residentUid]);
+      await sendFcmMulticast(
+        tokens,
+        "✅ Payment Verified",
+        `Your payment of ₹${result.allocatedTotal} has been verified. Outstanding: ₹${result.newDues}`,
+        { type: "PAYMENT_VERIFIED", paymentId: paymentDocId }
+      );
+    } catch (fcmErr) {
+      console.error("[verifyPaymentManualHttp] FCM error (non-fatal):", fcmErr.message);
+    }
+
     res.status(200).json({ ok: true, result });
   } catch (error) {
     if (error instanceof HttpsError) {
@@ -517,6 +548,8 @@ exports.rejectPaymentManualHttp = onRequest({ cors: true }, async (req, res) => 
     });
 
     const paymentRef = db.collection("payments").doc(paymentDocId);
+    let residentUid = "";
+
     await db.runTransaction(async (tx) => {
       const paySnap = await tx.get(paymentRef);
       if (!paySnap.exists) throw new HttpsError("not-found", "Payment not found.");
@@ -524,6 +557,7 @@ exports.rejectPaymentManualHttp = onRequest({ cors: true }, async (req, res) => 
       if (pay.status !== "SUBMITTED") {
         throw new HttpsError("failed-precondition", `Payment not SUBMITTED (is ${pay.status}).`);
       }
+      residentUid = String(pay.uid || ""); // capture for FCM after transaction
       tx.set(paymentRef, {
         status: "REJECTED",
         admin_note: reason,
@@ -540,6 +574,21 @@ exports.rejectPaymentManualHttp = onRequest({ cors: true }, async (req, res) => 
         }, { merge: true });
       }
     });
+
+    // Notify the resident (non-fatal)
+    try {
+      if (residentUid) {
+        const tokens = await getFcmTokensForUids(db, [residentUid]);
+        await sendFcmMulticast(
+          tokens,
+          "❌ Payment Rejected",
+          `Your payment was rejected. Reason: ${reason}. Please resubmit.`,
+          { type: "PAYMENT_REJECTED", paymentId: paymentDocId }
+        );
+      }
+    } catch (fcmErr) {
+      console.error("[rejectPaymentManualHttp] FCM error (non-fatal):", fcmErr.message);
+    }
 
     res.status(200).json({ ok: true });
   } catch (error) {
@@ -837,9 +886,22 @@ exports.createDemandDueHttp = onRequest({ cors: true }, async (req, res) => {
 
     if (batchCount > 0) await batch.commit();
 
-    // ── Backfill month field on existing MAINTENANCE invoices (if missing) ──
-    // (no-op for demand dues; just log)
     console.log(`[createDemandDueHttp] Created demand due "${title}" with ${targetDocs.length} invoices. demandId=${demandRef.id}`);
+
+    // ── Send FCM to targeted residents (non-fatal) ─────────────────────────
+    try {
+      const targetUids = targetDocs.map((d) => d.id);
+      const tokens = await getFcmTokensForUids(db, targetUids);
+      const dueDateStr = dueDate.toDate().toLocaleDateString("en-IN");
+      await sendFcmMulticast(
+        tokens,
+        `💸 New Due: ${title}`,
+        `Amount: ₹${amount}  |  Due by ${dueDateStr}`,
+        { type: "DEMAND_DUE", demandId: demandRef.id }
+      );
+    } catch (fcmErr) {
+      console.error("[createDemandDueHttp] FCM error (non-fatal):", fcmErr.message);
+    }
 
     res.status(200).json({
       ok: true,
@@ -854,14 +916,337 @@ exports.createDemandDueHttp = onRequest({ cors: true }, async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// EMAIL HELPER
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Lazy-creates the Nodemailer transporter from .env / environment variables. */
+function createTransporter() {
+  return nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
+}
+
+const SOCIETY_NAME = process.env.SOCIETY_NAME || "RWA Society";
+
+/** Sends a welcome email to a newly created resident with their login credentials. */
+async function sendWelcomeEmail({ toEmail, toName, houseNo, tempPassword }) {
+  const transporter = createTransporter();
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f0f4ff;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr><td align="center" style="padding:32px 16px;">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+
+        <!-- Header -->
+        <tr>
+          <td style="background:linear-gradient(135deg,#1A56DB,#3B82F6);padding:36px 40px;border-radius:16px 16px 0 0;text-align:center;">
+            <h1 style="color:#fff;margin:0;font-size:26px;letter-spacing:0.5px;">Welcome to ${SOCIETY_NAME}!</h1>
+            <p style="color:rgba(255,255,255,0.85);margin:8px 0 0;font-size:14px;">Your resident account is ready</p>
+          </td>
+        </tr>
+
+        <!-- Body -->
+        <tr>
+          <td style="background:#ffffff;padding:36px 40px;border-radius:0 0 16px 16px;border:1px solid #e5e7eb;">
+
+            <p style="color:#1e293b;font-size:16px;margin:0 0 8px;">Hello <strong>${toName}</strong>,</p>
+            <p style="color:#475569;font-size:14px;margin:0 0 24px;line-height:1.6;">
+              The society admin has created your account on the <strong>${SOCIETY_NAME}</strong> resident app.
+              You can now log in to view and pay your dues, raise issues, and stay updated with society notices.
+            </p>
+
+            <!-- Credentials box -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f7ff;border-radius:12px;margin-bottom:24px;">
+              <tr><td style="padding:24px;">
+                <p style="color:#1A56DB;font-weight:bold;font-size:13px;margin:0 0 16px;letter-spacing:0.5px;text-transform:uppercase;">Your Login Credentials</p>
+
+                <table width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="padding:8px 0;border-bottom:1px solid #dbeafe;">
+                      <span style="color:#64748b;font-size:13px;">Flat / Unit</span><br>
+                      <strong style="color:#1e293b;font-size:15px;">${houseNo}</strong>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:8px 0;border-bottom:1px solid #dbeafe;">
+                      <span style="color:#64748b;font-size:13px;">Email Address</span><br>
+                      <strong style="color:#1e293b;font-size:15px;">${toEmail}</strong>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:8px 0;">
+                      <span style="color:#64748b;font-size:13px;">Temporary Password</span><br>
+                      <strong style="color:#1A56DB;font-size:18px;letter-spacing:1px;">${tempPassword}</strong>
+                    </td>
+                  </tr>
+                </table>
+              </td></tr>
+            </table>
+
+            <!-- Tip -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#fff7ed;border-radius:10px;margin-bottom:24px;">
+              <tr><td style="padding:14px 18px;">
+                <p style="margin:0;color:#92400e;font-size:13px;">
+                  💡 <strong>Tip:</strong> After logging in, use the <em>"Forgot Password?"</em> option on the login screen to set your own password.
+                </p>
+              </td></tr>
+            </table>
+
+            <p style="color:#94a3b8;font-size:12px;margin:0;text-align:center;">
+              This is an automated message from the ${SOCIETY_NAME} RWA Manager app.<br>
+              Please do not reply to this email.
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  await transporter.sendMail({
+    from: `"${SOCIETY_NAME} RWA" <${process.env.EMAIL_USER}>`,
+    to: toEmail,
+    subject: `Welcome to ${SOCIETY_NAME} — Your Login Credentials`,
+    html,
+  });
+}
+
+// =============================================================================
+// FCM PUSH NOTIFICATION HELPERS
+// =============================================================================
+
+/**
+ * Fetch FCM tokens for a specific list of resident UIDs.
+ * Queries in chunks of 10 (Firestore 'in' limit).
+ */
+async function getFcmTokensForUids(db, uids) {
+  if (!uids || uids.length === 0) return [];
+  const tokens = [];
+  for (let i = 0; i < uids.length; i += 10) {
+    const chunk = uids.slice(i, i + 10);
+    const snap = await db.collection("users")
+      .where(admin.firestore.FieldPath.documentId(), "in", chunk)
+      .get();
+    snap.forEach((doc) => {
+      const t = doc.data().fcm_token;
+      if (t && typeof t === "string") tokens.push(t);
+    });
+  }
+  return tokens;
+}
+
+/**
+ * Fetch FCM tokens for ALL residents (role == "user").
+ */
+async function getAllResidentFcmTokens(db) {
+  const snap = await db.collection("users").where("role", "==", "user").get();
+  const tokens = [];
+  snap.forEach((doc) => {
+    const t = doc.data().fcm_token;
+    if (t && typeof t === "string") tokens.push(t);
+  });
+  return tokens;
+}
+
+/**
+ * Send an FCM multicast notification to a list of device tokens.
+ * Sends in batches of 500 (FCM limit per request).
+ * Non-throwing — logs errors but never crashes the caller.
+ */
+async function sendFcmMulticast(tokens, title, body, data = {}) {
+  if (!tokens || tokens.length === 0) {
+    console.log("[FCM] No tokens — skipping notification.");
+    return;
+  }
+  // Convert all data values to strings (FCM requirement)
+  const safeData = Object.fromEntries(
+    Object.entries(data).map(([k, v]) => [k, String(v)])
+  );
+
+  for (let i = 0; i < tokens.length; i += 500) {
+    const chunk = tokens.slice(i, i + 500);
+    try {
+      const response = await admin.messaging().sendEachForMulticast({
+        tokens: chunk,
+        notification: { title, body },
+        data: safeData,
+        android: {
+          notification: {
+            channelId: "rwa_channel",
+            priority: "high",
+          },
+        },
+        apns: {
+          payload: {
+            aps: { sound: "default" },
+          },
+        },
+      });
+      console.log(
+        `[FCM] Sent to ${chunk.length} tokens — ` +
+        `success=${response.successCount} fail=${response.failureCount}`
+      );
+    } catch (err) {
+      console.error("[FCM] sendEachForMulticast error:", err.message || err);
+    }
+  }
+}
+
+/**
+ * POST NOTICE
+ * POST /postNoticeHttp
+ * Body: { title, description, type }
+ *
+ * Saves the notice to Firestore and sends FCM to all residents.
+ */
+exports.postNoticeHttp = onRequest({ cors: true }, async (req, res) => {
+  if (req.method !== "POST") return httpError(res, 405, "METHOD_NOT_ALLOWED", "POST only");
+
+  try {
+    const db = admin.firestore();
+    const bearer = String(req.headers.authorization || "");
+    const body   = typeof req.body === "object" && req.body ? req.body : {};
+    const token  = bearer.startsWith("Bearer ") ? bearer.slice(7) : String(body.authToken || "");
+
+    const authContext = await resolveAuthContext({ auth: null, data: { authToken: token } });
+    await requireAdminFromAuthContext(db, authContext);
+
+    const title       = String(body.title       || "").trim();
+    const description = String(body.description || "").trim();
+    const type        = String(body.type        || "General").trim();
+    const postedBy    = String(body.posted_by   || "Admin").trim();
+
+    if (!title) return httpError(res, 400, "INVALID_ARGUMENT", "title required");
+
+    // Save notice to Firestore
+    const noticeRef = await db.collection("notices").add({
+      title,
+      description,
+      type,
+      posted_by: postedBy,
+      date: new Date().toISOString().slice(0, 10),
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    console.log(`[postNoticeHttp] Created notice ${noticeRef.id} "${title}"`);
+
+    // Notify all residents (non-fatal)
+    try {
+      const tokens = await getAllResidentFcmTokens(db);
+      await sendFcmMulticast(
+        tokens,
+        `📢 ${title}`,
+        description.slice(0, 120) || type,
+        { type: "NOTICE", noticeId: noticeRef.id }
+      );
+    } catch (fcmErr) {
+      console.error("[postNoticeHttp] FCM error (non-fatal):", fcmErr.message);
+    }
+
+    res.status(200).json({ ok: true, noticeId: noticeRef.id });
+  } catch (error) {
+    if (error instanceof HttpsError)
+      return res.status(error.httpErrorCode.status).json({ error: { status: error.code.toUpperCase().replace(/-/g, "_"), message: error.message } });
+    console.error("postNoticeHttp error", error);
+    res.status(500).json({ error: { status: "INTERNAL", message: "Internal error" } });
+  }
+});
+
+/**
+ * UPDATE COMPLAINT STATUS
+ * POST /updateComplaintStatusHttp
+ * Body: { complaintId, status, adminFeedback? }
+ *
+ * Updates the complaint document and sends FCM to the resident who filed it.
+ */
+exports.updateComplaintStatusHttp = onRequest({ cors: true }, async (req, res) => {
+  if (req.method !== "POST") return httpError(res, 405, "METHOD_NOT_ALLOWED", "POST only");
+
+  try {
+    const db = admin.firestore();
+    const bearer = String(req.headers.authorization || "");
+    const body   = typeof req.body === "object" && req.body ? req.body : {};
+    const token  = bearer.startsWith("Bearer ") ? bearer.slice(7) : String(body.authToken || "");
+
+    const authContext = await resolveAuthContext({ auth: null, data: { authToken: token } });
+    await requireAdminFromAuthContext(db, authContext);
+
+    const complaintId   = String(body.complaintId   || "").trim();
+    const newStatus     = String(body.status        || "").trim();
+    const adminFeedback = String(body.adminFeedback || "").trim();
+
+    if (!complaintId) return httpError(res, 400, "INVALID_ARGUMENT", "complaintId required");
+    if (!newStatus)   return httpError(res, 400, "INVALID_ARGUMENT", "status required");
+
+    const complaintRef = db.collection("complaints").doc(complaintId);
+    const complaintSnap = await complaintRef.get();
+    if (!complaintSnap.exists) return httpError(res, 404, "NOT_FOUND", "Complaint not found");
+
+    const complaint = complaintSnap.data();
+    const uid = String(complaint.uid || "");
+
+    // Build update payload
+    const updateData = {
+      status: newStatus,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (newStatus === "Resolved") {
+      updateData.adminFeedback = adminFeedback;
+      updateData.resolvedAt = admin.firestore.FieldValue.serverTimestamp();
+    }
+
+    await complaintRef.update(updateData);
+    console.log(`[updateComplaintStatusHttp] complaintId=${complaintId} → ${newStatus}`);
+
+    // Notify the resident (non-fatal)
+    try {
+      if (uid) {
+        const tokens = await getFcmTokensForUids(db, [uid]);
+        const complaintTitle = String(complaint.title || "Your complaint");
+        let notifBody = `Status updated to: ${newStatus}`;
+        if (newStatus === "Resolved") {
+          notifBody = `Your complaint "${complaintTitle}" has been resolved.`;
+        } else if (newStatus === "In Progress") {
+          notifBody = `Your complaint "${complaintTitle}" is now being looked into.`;
+        }
+        await sendFcmMulticast(tokens, "Complaint Update", notifBody, {
+          type: "COMPLAINT_STATUS",
+          complaintId,
+          status: newStatus,
+        });
+      }
+    } catch (fcmErr) {
+      console.error("[updateComplaintStatusHttp] FCM error (non-fatal):", fcmErr.message);
+    }
+
+    res.status(200).json({ ok: true });
+  } catch (error) {
+    if (error instanceof HttpsError)
+      return res.status(error.httpErrorCode.status).json({ error: { status: error.code.toUpperCase().replace(/-/g, "_"), message: error.message } });
+    console.error("updateComplaintStatusHttp error", error);
+    res.status(500).json({ error: { status: "INTERNAL", message: "Internal error" } });
+  }
+});
+
 /**
  * CREATE RESIDENT
  * POST /createResidentHttp
- * Body: { name, email, phone, houseNo, password }
+ * Body: { name, email, phone, houseNo }
  *
  * Uses Admin SDK to create a Firebase Auth user, then creates the Firestore
  * users document with the Auth UID as the document ID.
- * This guarantees firestoreDocId == Auth UID, which is required for invoice queries.
+ * Sends a welcome email with login credentials to the new resident.
  */
 exports.createResidentHttp = onRequest({ cors: true }, async (req, res) => {
   if (req.method !== "POST") return httpError(res, 405, "METHOD_NOT_ALLOWED", "POST only");
@@ -875,17 +1260,19 @@ exports.createResidentHttp = onRequest({ cors: true }, async (req, res) => {
     const authContext = await resolveAuthContext({ auth: null, data: { authToken: token } });
     await requireAdminFromAuthContext(db, authContext);
 
-    const name     = String(body.name     || "").trim();
-    const email    = String(body.email    || "").trim().toLowerCase();
-    const phone    = String(body.phone    || "").trim();
-    const houseNo  = String(body.houseNo  || "").trim();
-    const password = String(body.password || "").trim();
+    const name    = String(body.name    || "").trim();
+    const email   = String(body.email   || "").trim().toLowerCase();
+    const phone   = String(body.phone   || "").trim();
+    const houseNo = String(body.houseNo || "").trim();
 
-    if (!name)                        return httpError(res, 400, "INVALID_ARGUMENT", "name required");
-    if (!email)                       return httpError(res, 400, "INVALID_ARGUMENT", "email required");
-    if (!houseNo)                     return httpError(res, 400, "INVALID_ARGUMENT", "houseNo required");
-    if (!password || password.length < 6)
-      return httpError(res, 400, "INVALID_ARGUMENT", "password must be at least 6 characters");
+    if (!name)    return httpError(res, 400, "INVALID_ARGUMENT", "name required");
+    if (!email)   return httpError(res, 400, "INVALID_ARGUMENT", "email required");
+    if (!houseNo) return httpError(res, 400, "INVALID_ARGUMENT", "houseNo required");
+
+    // Generate a human-readable temporary password e.g. "HomeA101@3847"
+    const houseSlug   = houseNo.replace(/[^a-zA-Z0-9]/g, "").substring(0, 6);
+    const randomDigits = Math.floor(1000 + Math.random() * 9000); // 4-digit
+    const tempPassword = `Home${houseSlug}@${randomDigits}`;
 
     // Guard: check Firestore for existing email
     const existing = await db.collection("users").where("email", "==", email).limit(1).get();
@@ -894,7 +1281,7 @@ exports.createResidentHttp = onRequest({ cors: true }, async (req, res) => {
     // Step 1: Create Firebase Auth user
     const authUser = await admin.auth().createUser({
       email,
-      password,
+      password: tempPassword,
       displayName: name,
     });
 
@@ -913,8 +1300,18 @@ exports.createResidentHttp = onRequest({ cors: true }, async (req, res) => {
       last_payment_date: "",
     });
 
-    console.log(`[createResidentHttp] Created resident uid=${authUser.uid} email=${email} house=${houseNo}`);
-    res.status(200).json({ ok: true, uid: authUser.uid, email, name, houseNo });
+    // Step 3: Send welcome email with credentials (non-fatal if it fails)
+    let emailSent = false;
+    try {
+      await sendWelcomeEmail({ toEmail: email, toName: name, houseNo, tempPassword });
+      emailSent = true;
+      console.log(`[createResidentHttp] Welcome email sent to ${email}`);
+    } catch (mailErr) {
+      console.error("[createResidentHttp] Failed to send welcome email:", mailErr.message);
+    }
+
+    console.log(`[createResidentHttp] Created resident uid=${authUser.uid} email=${email} house=${houseNo} emailSent=${emailSent}`);
+    res.status(200).json({ ok: true, uid: authUser.uid, email, name, houseNo, tempPassword, emailSent });
 
   } catch (error) {
     if (error.code === "auth/email-already-exists") {

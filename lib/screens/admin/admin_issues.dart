@@ -1,5 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:rms_app/screens/login/login_screen.dart';
 
@@ -11,7 +14,44 @@ class AdminIssuesScreen extends StatefulWidget {
 }
 
 class _AdminIssuesScreenState extends State<AdminIssuesScreen> {
+  static const _base = 'https://us-central1-rms-app-3d585.cloudfunctions.net';
   final complaintsRef = FirebaseFirestore.instance.collection("complaints");
+
+  /// Call the Cloud Function to update a complaint's status.
+  /// Returns true on success, false on failure.
+  Future<bool> _callUpdateStatus(
+    String docId,
+    String newStatus, {
+    String adminFeedback = '',
+  }) async {
+    try {
+      final user  = FirebaseAuth.instance.currentUser;
+      final token = await user?.getIdToken() ?? '';
+
+      final response = await http.post(
+        Uri.parse('$_base/updateComplaintStatusHttp'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'complaintId':   docId,
+          'status':        newStatus,
+          'adminFeedback': adminFeedback,
+        }),
+      );
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode == 200 && data['ok'] == true) return true;
+
+      final msg = (data['error']?['message'] ?? 'Unknown error').toString();
+      debugPrint('[updateComplaintStatus] error: $msg');
+      return false;
+    } catch (e) {
+      debugPrint('[updateComplaintStatus] exception: $e');
+      return false;
+    }
+  }
 
   String _formatDate(Timestamp? ts) {
     if (ts == null) return "-";
@@ -27,14 +67,17 @@ class _AdminIssuesScreenState extends State<AdminIssuesScreen> {
     return Colors.grey;
   }
 
-  Future<void> _updateStatus(
-      String docId,
-      String newStatus,
-      ) async {
-    await complaintsRef.doc(docId).update({
-      "status": newStatus,
-      "updatedAt": FieldValue.serverTimestamp(),
-    });
+  Future<void> _updateStatus(String docId, String newStatus) async {
+    final ok = await _callUpdateStatus(docId, newStatus);
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Failed to update status"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Future<void> _resolveComplaintDialog(String docId) async {
@@ -78,16 +121,23 @@ class _AdminIssuesScreenState extends State<AdminIssuesScreen> {
 
     final feedback = feedbackController.text.trim();
 
-    await complaintsRef.doc(docId).update({
-      "status": "Resolved",
-      "adminFeedback": feedback,
-      "resolvedAt": FieldValue.serverTimestamp(),
-      "updatedAt": FieldValue.serverTimestamp(),
-    });
+    final success = await _callUpdateStatus(
+      docId,
+      "Resolved",
+      adminFeedback: feedback,
+    );
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Complaint resolved ✅")),
+      success
+          ? const SnackBar(
+              content: Text("Complaint resolved ✅ — resident notified!"),
+              backgroundColor: Colors.green,
+            )
+          : const SnackBar(
+              content: Text("Failed to resolve complaint"),
+              backgroundColor: Colors.red,
+            ),
     );
   }
 

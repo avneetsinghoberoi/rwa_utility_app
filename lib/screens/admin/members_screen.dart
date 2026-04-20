@@ -1,11 +1,13 @@
 import 'dart:convert';
-import 'dart:math';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:rms_app/screens/admin/report_pdf_service.dart';
 import 'package:rms_app/screens/login/login_screen.dart';
 import 'package:rms_app/theme/app_theme.dart';
 
@@ -20,6 +22,7 @@ class _MembersScreenState extends State<MembersScreen> {
   static const _base = 'https://us-central1-rms-app-3d585.cloudfunctions.net';
 
   bool _deleting = false;
+  bool _generatingReport = false;
 
   String _monthKey() {
     final now = DateTime.now();
@@ -28,8 +31,8 @@ class _MembersScreenState extends State<MembersScreen> {
 
   // ── Create resident via Cloud Function ─────────────────────────────────────
   Future<void> _createResident(Map<String, String> data) async {
-    final user  = FirebaseAuth.instance.currentUser;
-    final token = await user?.getIdToken(true);
+    final adminUser = FirebaseAuth.instance.currentUser;
+    final token     = await adminUser?.getIdToken(true);
 
     final response = await http.post(
       Uri.parse('$_base/createResidentHttp'),
@@ -38,27 +41,29 @@ class _MembersScreenState extends State<MembersScreen> {
         if (token != null) 'Authorization': 'Bearer $token',
       },
       body: jsonEncode({
-        'name':     data['name'],
-        'email':    data['email'],
-        'phone':    data['phone'],
-        'houseNo':  data['houseNo'],
-        'password': data['password'],
+        'name':    data['name'],
+        'email':   data['email'],
+        'phone':   data['phone'],
+        'houseNo': data['houseNo'],
       }),
     );
 
-    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode != 200) {
-      final err = (json['error'] as Map<String, dynamic>?) ?? {};
+      final err = (body['error'] as Map<String, dynamic>?) ?? {};
       throw Exception(err['message'] ?? 'Failed to create resident');
     }
 
-    // Show credentials dialog
+    final tempPassword = body['tempPassword']?.toString() ?? '';
+    final emailSent    = body['emailSent'] == true;
+
     if (mounted) {
-      await _showCredentialsDialog(
-        name:     data['name']!,
-        email:    data['email']!,
-        password: data['password']!,
-        houseNo:  data['houseNo']!,
+      await _showCreatedDialog(
+        name:         data['name']!,
+        email:        data['email']!,
+        houseNo:      data['houseNo']!,
+        tempPassword: tempPassword,
+        emailSent:    emailSent,
       );
     }
   }
@@ -124,6 +129,91 @@ class _MembersScreenState extends State<MembersScreen> {
     }
   }
 
+  // ── Report: month picker + PDF generation ─────────────────────────────────
+  Future<void> _openReportFlow() async {
+    // Build last 13 months (current + 12 past)
+    final now = DateTime.now();
+    final months = List.generate(13, (i) {
+      final d = DateTime(now.year, now.month - i, 1);
+      return '${d.year}-${d.month.toString().padLeft(2, '0')}';
+    });
+
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (_) => _MonthPickerDialog(months: months),
+    );
+    if (selected == null || !mounted) return;
+
+    setState(() => _generatingReport = true);
+    try {
+      // Fetch society name from admin's Firestore record
+      final adminDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(FirebaseAuth.instance.currentUser?.uid)
+          .get();
+      final societyName = adminDoc.data()?['societyName']?.toString() ?? 'RWA Society';
+
+      final entries = await ReportPdfService.fetchMonthData(selected);
+      final file    = await ReportPdfService.generateReport(
+        monthKey:    selected,
+        societyName: societyName,
+        entries:     entries,
+      );
+
+      if (!mounted) return;
+
+      // Offer Open or Share
+      await showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.picture_as_pdf_rounded, color: AppColors.primary),
+              SizedBox(width: 10),
+              Text('Report Ready', style: TextStyle(fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Text(
+            'Dues report for ${DateFormat('MMMM yyyy').format(DateTime.parse('$selected-01'))} '
+            'has been generated with ${entries.length} residents.',
+            style: const TextStyle(fontSize: 14),
+          ),
+          actions: [
+            TextButton.icon(
+              onPressed: () async {
+                Navigator.pop(context);
+                await ReportPdfService.sharePdf(
+                  file,
+                  selected.replaceAll('-', '_'),
+                );
+              },
+              icon: const Icon(Icons.share_rounded, size: 18),
+              label: const Text('Share'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () async {
+                Navigator.pop(context);
+                await OpenFilex.open(file.path);
+              },
+              icon: const Icon(Icons.open_in_new_rounded, size: 18),
+              label: const Text('Open PDF'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (mounted) _showSnack('Failed to generate report: $e');
+    } finally {
+      if (mounted) setState(() => _generatingReport = false);
+    }
+  }
+
   // ── Open Add Member dialog ─────────────────────────────────────────────────
   void _openAddMemberDialog() async {
     final data = await showDialog<Map<String, String>>(
@@ -149,12 +239,13 @@ class _MembersScreenState extends State<MembersScreen> {
     }
   }
 
-  // ── Credentials dialog (shown after successful creation) ───────────────────
-  Future<void> _showCredentialsDialog({
+  // ── Success dialog after resident creation ─────────────────────────────────
+  Future<void> _showCreatedDialog({
     required String name,
     required String email,
-    required String password,
     required String houseNo,
+    required String tempPassword,
+    required bool emailSent,
   }) async {
     return showDialog(
       context: context,
@@ -165,52 +256,134 @@ class _MembersScreenState extends State<MembersScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppColors.primaryLight,
+                color: const Color(0xFFD1FAE5),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 22),
+              child: const Icon(Icons.check_circle_rounded, color: Color(0xFF059669), size: 22),
             ),
             const SizedBox(width: 12),
             const Expanded(
-              child: Text('Resident Created!', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              child: Text('Resident Added!', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             ),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Share these login credentials with the resident:',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-            ),
-            const SizedBox(height: 16),
-            _credRow(Icons.person_outline_rounded, 'Name', name),
-            _credRow(Icons.home_outlined, 'Flat / Unit', houseNo),
-            _credRow(Icons.email_outlined, 'Email (login ID)', email),
-            _credRow(Icons.lock_outline_rounded, 'Password', password),
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(
-                    text: 'Login credentials for $name (Flat $houseNo)\nEmail: $email\nPassword: $password',
-                  ));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Credentials copied to clipboard')),
-                  );
-                },
-                icon: const Icon(Icons.copy_rounded, size: 16),
-                label: const Text('Copy Credentials'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.primary,
-                  side: const BorderSide(color: AppColors.primary),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _credRow(Icons.person_outline_rounded, 'Name', name),
+              _credRow(Icons.home_outlined, 'Flat / Unit', houseNo),
+              _credRow(Icons.email_outlined, 'Login Email', email),
+
+              const SizedBox(height: 12),
+
+              // Temp password box
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryLight,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Temporary Password',
+                        style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            tempPassword,
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.copy_rounded, size: 18, color: AppColors.primary),
+                          tooltip: 'Copy password',
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: tempPassword));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Password copied')),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-            ),
-          ],
+
+              const SizedBox(height: 10),
+
+              // Email status banner
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: emailSent ? const Color(0xFFECFDF5) : const Color(0xFFFFF7ED),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      emailSent ? Icons.mark_email_read_outlined : Icons.warning_amber_rounded,
+                      color: emailSent ? const Color(0xFF059669) : const Color(0xFFD97706),
+                      size: 16,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        emailSent
+                            ? 'Welcome email with these credentials has been sent to $email.'
+                            : 'Email could not be sent. Share these credentials manually via WhatsApp or SMS.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: emailSent ? const Color(0xFF065F46) : const Color(0xFF92400E),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              // Copy all button
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(
+                      text: 'Welcome to the society app!\n'
+                            'Flat: $houseNo\n'
+                            'Email: $email\n'
+                            'Password: $tempPassword\n'
+                            'Tip: Use "Forgot Password" after login to set your own password.',
+                    ));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Credentials copied — ready to share')),
+                    );
+                  },
+                  icon: const Icon(Icons.share_outlined, size: 16),
+                  label: const Text('Copy All to Share'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.primary),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           ElevatedButton(
@@ -286,6 +459,17 @@ class _MembersScreenState extends State<MembersScreen> {
         elevation: 0,
         surfaceTintColor: Colors.white,
         actions: [
+          // Download report
+          _generatingReport
+              ? const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)),
+                )
+              : IconButton(
+                  icon: const Icon(Icons.download_rounded),
+                  tooltip: 'Download Dues Report',
+                  onPressed: _openReportFlow,
+                ),
           IconButton(
             icon: const Icon(Icons.logout_rounded),
             onPressed: () => Navigator.pushAndRemoveUntil(
@@ -461,14 +645,101 @@ class _MembersScreenState extends State<MembersScreen> {
             ],
           ),
 
-          // Full-screen loading overlay during delete
-          if (_deleting)
+          // Full-screen loading overlay during delete / report generation
+          if (_deleting || _generatingReport)
             Container(
               color: Colors.black26,
-              child: const Center(child: CircularProgressIndicator()),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(color: Colors.white),
+                    const SizedBox(height: 12),
+                    Text(
+                      _generatingReport ? 'Generating report…' : 'Removing resident…',
+                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
             ),
         ],
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Month Picker Dialog
+// ─────────────────────────────────────────────────────────────────────────────
+class _MonthPickerDialog extends StatelessWidget {
+  final List<String> months;
+  const _MonthPickerDialog({required this.months});
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Row(
+        children: [
+          Icon(Icons.calendar_month_rounded, color: AppColors.primary),
+          SizedBox(width: 10),
+          Text('Select Month', style: TextStyle(fontWeight: FontWeight.bold)),
+        ],
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: ListView.separated(
+          shrinkWrap: true,
+          itemCount: months.length,
+          separatorBuilder: (_, __) => const Divider(height: 1, color: AppColors.border),
+          itemBuilder: (_, i) {
+            final m = months[i];
+            String label = m;
+            try {
+              label = DateFormat('MMMM yyyy').format(DateTime.parse('$m-01'));
+            } catch (_) {}
+            final isCurrentMonth = i == 0;
+            return ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              leading: Container(
+                width: 40, height: 40,
+                decoration: BoxDecoration(
+                  color: isCurrentMonth ? AppColors.primaryLight : AppColors.background,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  Icons.receipt_long_outlined,
+                  color: isCurrentMonth ? AppColors.primary : AppColors.textHint,
+                  size: 20,
+                ),
+              ),
+              title: Text(label, style: TextStyle(
+                fontWeight: isCurrentMonth ? FontWeight.bold : FontWeight.normal,
+                color: isCurrentMonth ? AppColors.primary : AppColors.textPrimary,
+                fontSize: 14,
+              )),
+              trailing: isCurrentMonth
+                  ? Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryLight,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Text('Current', style: TextStyle(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.w600)),
+                    )
+                  : const Icon(Icons.chevron_right_rounded, color: AppColors.textHint),
+              onTap: () => Navigator.pop(context, m),
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+      ],
     );
   }
 }
@@ -484,20 +755,11 @@ class AddMemberDialog extends StatefulWidget {
 }
 
 class _AddMemberDialogState extends State<AddMemberDialog> {
-  final _formKey     = GlobalKey<FormState>();
-  final _nameCtrl    = TextEditingController();
-  final _emailCtrl   = TextEditingController();
-  final _phoneCtrl   = TextEditingController();
-  final _houseCtrl   = TextEditingController();
-  final _passCtrl    = TextEditingController();
-  bool _showPassword = false;
-
-  void _generatePassword() {
-    final house = _houseCtrl.text.trim().replaceAll(RegExp(r'\s+'), '');
-    final suffix = (100 + Random().nextInt(900)).toString(); // 3-digit random
-    final generated = house.isNotEmpty ? 'Home${house}@$suffix' : 'Home@$suffix';
-    setState(() => _passCtrl.text = generated);
-  }
+  final _formKey  = GlobalKey<FormState>();
+  final _nameCtrl  = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  final _houseCtrl = TextEditingController();
 
   @override
   void dispose() {
@@ -505,7 +767,6 @@ class _AddMemberDialogState extends State<AddMemberDialog> {
     _emailCtrl.dispose();
     _phoneCtrl.dispose();
     _houseCtrl.dispose();
-    _passCtrl.dispose();
     super.dispose();
   }
 
@@ -534,9 +795,25 @@ class _AddMemberDialogState extends State<AddMemberDialog> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'A Firebase account will be created. Share the email and password with the resident so they can log in.',
-                  style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryLight,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.info_outline_rounded, color: AppColors.primary, size: 16),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'A login account will be created and a password setup email will be sent to the resident automatically.',
+                          style: TextStyle(color: AppColors.primary, fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 16),
 
@@ -597,53 +874,6 @@ class _AddMemberDialogState extends State<AddMemberDialog> {
                   ),
                   keyboardType: TextInputType.phone,
                 ),
-                const SizedBox(height: 12),
-
-                // Password
-                TextFormField(
-                  controller: _passCtrl,
-                  obscureText: !_showPassword,
-                  decoration: InputDecoration(
-                    labelText: 'Password *',
-                    prefixIcon: const Icon(Icons.lock_outline_rounded),
-                    border: const OutlineInputBorder(),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    suffixIcon: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: Icon(_showPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 20),
-                          onPressed: () => setState(() => _showPassword = !_showPassword),
-                          tooltip: _showPassword ? 'Hide' : 'Show',
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.auto_fix_high_rounded, size: 20, color: AppColors.primary),
-                          onPressed: _generatePassword,
-                          tooltip: 'Auto-generate',
-                        ),
-                      ],
-                    ),
-                  ),
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'Password is required';
-                    if (v.trim().length < 6) return 'Minimum 6 characters';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 6),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed: _generatePassword,
-                    icon: const Icon(Icons.auto_fix_high_rounded, size: 14),
-                    label: const Text('Auto-generate password', style: TextStyle(fontSize: 12)),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.primary,
-                      padding: EdgeInsets.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
@@ -658,16 +888,15 @@ class _AddMemberDialogState extends State<AddMemberDialog> {
           onPressed: () {
             if (_formKey.currentState!.validate()) {
               Navigator.pop(context, {
-                'name':     _nameCtrl.text.trim(),
-                'email':    _emailCtrl.text.trim(),
-                'phone':    _phoneCtrl.text.trim(),
-                'houseNo':  _houseCtrl.text.trim().toUpperCase(),
-                'password': _passCtrl.text.trim(),
+                'name':    _nameCtrl.text.trim(),
+                'email':   _emailCtrl.text.trim(),
+                'phone':   _phoneCtrl.text.trim(),
+                'houseNo': _houseCtrl.text.trim().toUpperCase(),
               });
             }
           },
           icon: const Icon(Icons.person_add_rounded, size: 16),
-          label: const Text('Create Account'),
+          label: const Text('Create & Send Email'),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,

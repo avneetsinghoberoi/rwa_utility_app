@@ -42,8 +42,10 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      final userData = snapshot.docs.first.data();
-      final role = userData['role'] ?? 'user';
+      // Include firestoreDocId so invoice queries work correctly
+      final doc      = snapshot.docs.first;
+      final userData = {...doc.data(), 'firestoreDocId': doc.id};
+      final role     = userData['role'] ?? 'user';
 
       if (role == 'admin') {
         Navigator.pushReplacement(
@@ -62,6 +64,81 @@ class _LoginScreenState extends State<LoginScreen> {
       _showError("Something went wrong. Please try again.");
     } finally {
       setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _showForgotPassword() async {
+    final emailCtrl = TextEditingController();
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Reset Password', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter your registered email address. We\'ll send you a link to reset your password.',
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: emailCtrl,
+              keyboardType: TextInputType.emailAddress,
+              autofocus: true,
+              decoration: AppTheme.inputDecoration('Email Address', Icons.email_outlined),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Send Reset Link'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != true || !mounted) return;
+
+    final email = emailCtrl.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      _showError('Please enter a valid email address.');
+      return;
+    }
+
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.mark_email_read_outlined, color: Colors.white, size: 18),
+              const SizedBox(width: 8),
+              Expanded(child: Text('Reset link sent to $email')),
+            ],
+          ),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ));
+      }
+    } on FirebaseAuthException catch (e) {
+      if (mounted) {
+        _showError(e.code == 'user-not-found'
+            ? 'No account found with this email.'
+            : e.message ?? 'Failed to send reset email.');
+      }
     }
   }
 
@@ -252,7 +329,25 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 28),
+                        const SizedBox(height: 8),
+
+                        // ── Forgot password ─────────────────────
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: _showForgotPassword,
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppColors.primary,
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Text(
+                              'Forgot Password?',
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
 
                         // ── Login button ────────────────────────
                         _isLoading
