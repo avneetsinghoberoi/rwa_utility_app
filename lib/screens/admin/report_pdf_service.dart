@@ -127,7 +127,9 @@ class ReportPdfService {
     String monthLabel = monthKey;
     try {
       monthLabel = DateFormat('MMMM yyyy').format(DateTime.parse('$monthKey-01'));
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Could not format month label for "$monthKey": $e');
+    }
 
     final generatedOn = DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now());
 

@@ -699,7 +699,9 @@ class _MonthPickerDialog extends StatelessWidget {
             String label = m;
             try {
               label = DateFormat('MMMM yyyy').format(DateTime.parse('$m-01'));
-            } catch (_) {}
+            } catch (e) {
+              debugPrint('Could not parse month label for "$m": $e');
+            }
             final isCurrentMonth = i == 0;
             return ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),

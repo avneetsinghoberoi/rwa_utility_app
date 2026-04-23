@@ -65,7 +65,10 @@ class _UserPayScreenState extends State<UserPayScreen> {
           .doc(user!.uid)
           .get();
       userData = snap.data() ?? {};
-    } catch (_) {}
+    } catch (e, stackTrace) {
+      debugPrint('Error loading user data: $e');
+      debugPrint(stackTrace.toString());
+    }
     setState(() => loading = false);
   }
 

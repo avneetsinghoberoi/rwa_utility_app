@@ -56,7 +56,10 @@ class _CreateDemandDueScreenState extends State<CreateDemandDueScreen> {
         };
       }).toList()
         ..sort((a, b) => a['house_no']!.compareTo(b['house_no']!));
-    } catch (_) {}
+    } catch (e, stackTrace) {
+      debugPrint('Error fetching members: $e');
+      debugPrint(stackTrace.toString());
+    }
     if (mounted) setState(() => _loadingMembers = false);
   }
 
