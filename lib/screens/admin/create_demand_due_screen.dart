@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:rms_app/config/app_config.dart';
 import 'package:rms_app/theme/app_theme.dart';
 
 class CreateDemandDueScreen extends StatefulWidget {
@@ -15,7 +16,7 @@ class CreateDemandDueScreen extends StatefulWidget {
 }
 
 class _CreateDemandDueScreenState extends State<CreateDemandDueScreen> {
-  static const _base = 'https://us-central1-rms-app-3d585.cloudfunctions.net';
+  static final String _base = AppConfig.baseUrl;
 
   final _formKey = GlobalKey<FormState>();
   final _titleCtrl = TextEditingController();

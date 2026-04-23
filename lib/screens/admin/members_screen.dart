@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:rms_app/config/app_config.dart';
 import 'package:rms_app/screens/admin/report_pdf_service.dart';
 import 'package:rms_app/screens/login/login_screen.dart';
 import 'package:rms_app/theme/app_theme.dart';
@@ -19,7 +20,7 @@ class MembersScreen extends StatefulWidget {
 }
 
 class _MembersScreenState extends State<MembersScreen> {
-  static const _base = 'https://us-central1-rms-app-3d585.cloudfunctions.net';
+  static final String _base = AppConfig.baseUrl;
 
   bool _deleting = false;
   bool _generatingReport = false;

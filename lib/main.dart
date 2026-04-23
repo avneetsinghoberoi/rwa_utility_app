@@ -10,11 +10,6 @@ import 'services/notification_service.dart';
 import 'screens/login/login_screen.dart';
 import 'screens/admin/admin_dashboard.dart';
 import 'screens/user/dashboard.dart';
-import 'screens/user/pay_screen.dart';
-import 'screens/user/issues_screen.dart';
-import 'screens/user/notices_screen.dart';
-import 'screens/user/expense_screen.dart';
-import 'screens/user/qrpass_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

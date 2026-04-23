@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:rms_app/config/app_config.dart';
 import 'package:rms_app/theme/app_theme.dart';
 
 class AdminPayScreen extends StatefulWidget {
@@ -15,14 +16,12 @@ class AdminPayScreen extends StatefulWidget {
 }
 
 class _AdminPayScreenState extends State<AdminPayScreen> {
-  static const _base =
-      'https://us-central1-rms-app-3d585.cloudfunctions.net';
-  static const String _verifyPaymentHttpUrl =
-      '$_base/verifyPaymentManualHttp';
-  static const String _rejectPaymentHttpUrl =
-      '$_base/rejectPaymentManualHttp';
-  static const String _generateInvoicesHttpUrl =
-      '$_base/generateInvoicesManualHttp';
+  static final String _verifyPaymentHttpUrl =
+      AppConfig.functionsUrl('verifyPaymentManualHttp');
+  static final String _rejectPaymentHttpUrl =
+      AppConfig.functionsUrl('rejectPaymentManualHttp');
+  static final String _generateInvoicesHttpUrl =
+      AppConfig.functionsUrl('generateInvoicesManualHttp');
 
   // Track which payment card is loading so we can show per-card spinners
   String? _loadingPaymentId;
@@ -537,7 +536,6 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
     final methodStr = (m['method'] ?? '-').toString();
     final proofUrl = (m['proof_url'] ?? '').toString();
     final note = (m['note'] ?? '').toString().trim();
-    final invoiceId = (m['invoice_id'] ?? '').toString();
     final purpose = (m['purpose'] ?? '').toString().trim();
     final invoiceType = (m['invoice_type'] ?? 'MAINTENANCE').toString();
     final statusColor = _statusColor(status);

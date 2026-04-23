@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:rms_app/config/app_config.dart';
 import 'package:rms_app/screens/login/login_screen.dart';
 
 class AdminIssuesScreen extends StatefulWidget {
@@ -14,7 +15,7 @@ class AdminIssuesScreen extends StatefulWidget {
 }
 
 class _AdminIssuesScreenState extends State<AdminIssuesScreen> {
-  static const _base = 'https://us-central1-rms-app-3d585.cloudfunctions.net';
+  static final String _base = AppConfig.baseUrl;
   final complaintsRef = FirebaseFirestore.instance.collection("complaints");
 
   /// Call the Cloud Function to update a complaint's status.

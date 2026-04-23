@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
-import 'package:intl/intl.dart';
+import 'package:rms_app/config/app_config.dart';
 import 'package:rms_app/screens/login/login_screen.dart';
 
 class AdminNoticesScreen extends StatefulWidget {
@@ -218,7 +218,7 @@ class _NewAnnouncementDialogState extends State<NewAnnouncementDialog> {
   final descController = TextEditingController();
   String? selectedType;
   final List<String> types = ["General", "Urgent", "Event", "Maintenance"];
-  static const _base = 'https://us-central1-rms-app-3d585.cloudfunctions.net';
+  static final String _base = AppConfig.baseUrl;
   bool isSubmitting = false;
 
   Future<void> _submitNotice() async {

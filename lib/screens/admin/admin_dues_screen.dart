@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:rms_app/config/app_config.dart';
 import 'package:rms_app/theme/app_theme.dart';
 
 import 'create_demand_due_screen.dart';
@@ -12,7 +13,7 @@ import 'create_demand_due_screen.dart';
 class AdminDuesScreen extends StatelessWidget {
   const AdminDuesScreen({super.key});
 
-  static const _base = 'https://us-central1-rms-app-3d585.cloudfunctions.net';
+  static final String _base = AppConfig.baseUrl;
 
   @override
   Widget build(BuildContext context) {

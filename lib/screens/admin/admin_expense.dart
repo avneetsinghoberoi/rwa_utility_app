@@ -358,6 +358,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
     monthLabel = widget.defaultMonthLabel;
   }
 
+  // ignore: unused_element
   String _formatMonthLabelFromKey(String key) {
     final parts = key.split("-");
     if (parts.length != 2) return key;

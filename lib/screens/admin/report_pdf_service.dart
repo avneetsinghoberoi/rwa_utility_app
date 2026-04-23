@@ -132,6 +132,7 @@ class ReportPdfService {
     final generatedOn = DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now());
 
     // ── Status badge widget ────────────────────────────────────────────────
+    // ignore: unused_element
     pw.Widget statusBadge(String status) {
       final color = _statusColor(status);
       return pw.Container(
