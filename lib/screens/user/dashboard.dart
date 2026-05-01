@@ -5,6 +5,7 @@ import 'issues_screen.dart';
 import 'notices_screen.dart';
 import 'expense_screen.dart';
 import 'qrpass_screen.dart';
+import 'directory_screen.dart';
 
 class Dashboard extends StatefulWidget {
   final Map<String, dynamic> userData;
@@ -25,6 +26,7 @@ class _DashboardState extends State<Dashboard> {
       const UserPayScreen(),
       const IssuesScreen(),
       const NoticesScreen(),
+      const DirectoryScreen(),
       const ExpenseScreen(),
       UserProfileScreen(),
     ];
@@ -56,6 +58,11 @@ class _DashboardState extends State<Dashboard> {
             icon: Icon(Icons.notifications_outlined),
             selectedIcon: Icon(Icons.notifications_rounded),
             label: 'Notices',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.people_alt_outlined),
+            selectedIcon: Icon(Icons.people_alt_rounded),
+            label: 'Directory',
           ),
           NavigationDestination(
             icon: Icon(Icons.receipt_long_outlined),

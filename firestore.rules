@@ -17,9 +17,10 @@ service cloud.firestore {
     }
 
     // ── users ─────────────────────────────────────────────────────────────────
-    // Residents can read/update their own doc; admins can read/write all.
+    // Residents can read all user data (for directory feature) and update their own.
+    // Admins can read/write all.
     match /users/{userId} {
-      allow read:   if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow read:   if isSignedIn(); // All authenticated users can view directory
       allow create: if isAdmin();
       allow update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       allow delete: if isAdmin();
@@ -77,6 +78,16 @@ service cloud.firestore {
     // ── issues ────────────────────────────────────────────────────────────────
     // Residents can create and read their own; admins can read/update all.
     match /issues/{issueId} {
+      allow read:   if isSignedIn()
+          && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isSignedIn();
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    // ── complaints ─────────────────────────────────────────────────────────────
+    // Residents can create and read their own; admins can read/update all.
+    match /complaints/{complaintId} {
       allow read:   if isSignedIn()
           && (resource.data.uid == request.auth.uid || isAdmin());
       allow create: if isSignedIn();
