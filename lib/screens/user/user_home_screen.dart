@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
-import 'package:rms_app/theme/app_theme.dart';
+import 'package:gate_basic/theme/app_theme.dart';
 
 import 'pay_screen.dart';
 import 'issues_screen.dart';
 import 'notices_screen.dart';
 import 'expense_screen.dart';
 import 'qrpass_screen.dart';
+import 'directory_screen.dart';
 
 class UserHomeScreen extends StatefulWidget {
   final Map<String, dynamic> userData;
@@ -40,6 +41,12 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
       screen: const NoticesScreen(),
     ),
     _QuickItem(
+      icon: Icons.people_alt_rounded,
+      label: 'Directory',
+      color: const Color(0xFF06B6D4),
+      screen: const DirectoryScreen(),
+    ),
+    _QuickItem(
       icon: Icons.qr_code_rounded,
       label: 'QR Pass',
       color: AppColors.success,
@@ -69,7 +76,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
       backgroundColor: AppColors.background,
       body: CustomScrollView(
         slivers: [
-          // ── Gradient header ─────────────────────────────────────
+          // ── Gradient header with branding ──────────────────────
           SliverAppBar(
             expandedHeight: 170,
             floating: false,

@@ -25,15 +25,9 @@ class DefaultFirebaseOptions {
       case TargetPlatform.iOS:
         return ios;
       case TargetPlatform.macOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for macos - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return macos;
       case TargetPlatform.windows:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for windows - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return windows;
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -58,7 +52,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyC155e-ThyIV1-O5ePyfKGsrrEibW817SI',
-    appId: '1:1085944093717:android:85eef057da5a129a2d421c',
+    appId: '1:1085944093717:android:83c3164e885742b42d421c',
     messagingSenderId: '1085944093717',
     projectId: 'rms-app-3d585',
     storageBucket: 'rms-app-3d585.firebasestorage.app',
@@ -72,4 +66,24 @@ class DefaultFirebaseOptions {
     storageBucket: 'rms-app-3d585.firebasestorage.app',
     iosBundleId: 'com.example.rmsApp',
   );
+
+  static const FirebaseOptions macos = FirebaseOptions(
+    apiKey: 'AIzaSyA6pQ5xLk2ainN0AN61Om-tqun_OlWeni8',
+    appId: '1:1085944093717:ios:43370b71e0f785532d421c',
+    messagingSenderId: '1085944093717',
+    projectId: 'rms-app-3d585',
+    storageBucket: 'rms-app-3d585.firebasestorage.app',
+    iosBundleId: 'com.example.rmsApp',
+  );
+
+  static const FirebaseOptions windows = FirebaseOptions(
+    apiKey: 'AIzaSyCpAoa1Ziip1W7pv-ctou8OYUNHV2HT4EM',
+    appId: '1:1085944093717:web:32d4cb19e56ae1572d421c',
+    messagingSenderId: '1085944093717',
+    projectId: 'rms-app-3d585',
+    authDomain: 'rms-app-3d585.firebaseapp.com',
+    storageBucket: 'rms-app-3d585.firebasestorage.app',
+    measurementId: 'G-26MFCVXDM0',
+  );
+
 }

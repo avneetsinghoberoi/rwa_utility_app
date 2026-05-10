@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
-import 'package:rms_app/config/app_config.dart';
-import 'package:rms_app/screens/login/login_screen.dart';
+import 'package:gate_basic/config/app_config.dart';
+import 'package:gate_basic/screens/login/login_screen.dart';
 
 class AdminNoticesScreen extends StatefulWidget {
   const AdminNoticesScreen({super.key});
@@ -42,7 +42,19 @@ class _AdminNoticesScreenState extends State<AdminNoticesScreen> {
         elevation: 0,
         surfaceTintColor: Colors.white,
         title: const Text("Community Notices",
-            style: TextStyle(fontWeight: FontWeight.bold)),
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF0F172A),
+              letterSpacing: -0.5,
+            )),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(
+            color: const Color(0xFFE5E7EB),
+            height: 1,
+          ),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout_rounded),

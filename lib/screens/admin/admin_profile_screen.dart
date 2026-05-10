@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:rms_app/screens/login/login_screen.dart';
+import 'package:gate_basic/screens/login/login_screen.dart';
 
 class AdminProfileScreen extends StatelessWidget {
   const AdminProfileScreen({super.key});
@@ -9,16 +9,30 @@ class AdminProfileScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4FF),
       appBar: AppBar(
-        title: const Text("Admin Profile", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text("Admin Profile",
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF0F172A),
+              letterSpacing: -0.5,
+            )),
         backgroundColor: Colors.white,
         foregroundColor: const Color(0xFF0F172A),
         elevation: 0,
         surfaceTintColor: Colors.white,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(
+            color: const Color(0xFFE5E7EB),
+            height: 1,
+          ),
+        ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          children: [
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            children: [
             // Profile Avatar
             const CircleAvatar(
               radius: 50,
@@ -29,7 +43,7 @@ class AdminProfileScreen extends StatelessWidget {
 
             // Admin Name
             const Text(
-              "Rohit Kumar",
+              "Society Admin",
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
@@ -87,6 +101,7 @@ class AdminProfileScreen extends StatelessWidget {
               ),
             ),
           ],
+          ),
         ),
       ),
     );

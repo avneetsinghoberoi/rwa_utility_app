@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:rms_app/screens/admin/admin_profile_screen.dart';
-import 'package:rms_app/screens/admin/members_screen.dart';
-import 'package:rms_app/theme/app_theme.dart';
+import 'package:gate_basic/screens/admin/admin_profile_screen.dart';
+import 'package:gate_basic/screens/admin/members_screen.dart';
+import 'package:gate_basic/theme/app_theme.dart';
 import 'admin_dues_screen.dart';
 import 'admin_pay_screen.dart';
 import 'admin_issues.dart';
@@ -53,7 +53,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           NavigationDestination(
             icon: Icon(Icons.credit_card_outlined),
             selectedIcon: Icon(Icons.credit_card_rounded, color: AppColors.primary),
-            label: 'Payments',
+            label: 'Pay',
           ),
           NavigationDestination(
             icon: Icon(Icons.request_quote_outlined),

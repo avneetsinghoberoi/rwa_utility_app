@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:rms_app/theme/app_theme.dart';
+import 'package:gate_basic/theme/app_theme.dart';
 
 class NoticesScreen extends StatelessWidget {
   const NoticesScreen({super.key});
@@ -16,7 +16,19 @@ class NoticesScreen extends StatelessWidget {
         surfaceTintColor: Colors.white,
         title: const Text(
           'Community Notices',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textPrimary,
+            letterSpacing: -0.5,
+          ),
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(
+            color: AppColors.border,
+            height: 1,
+          ),
         ),
       ),
       body: StreamBuilder<QuerySnapshot>(

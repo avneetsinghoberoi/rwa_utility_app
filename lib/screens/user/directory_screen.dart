@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import 'package:rms_app/theme/app_theme.dart';
+import 'package:gate_basic/theme/app_theme.dart';
 
 class DirectoryScreen extends StatefulWidget {
   const DirectoryScreen({super.key});
@@ -72,8 +72,17 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
         title: const Text(
           'Members Directory',
           style: TextStyle(
-            fontWeight: FontWeight.bold,
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
             color: AppColors.textPrimary,
+            letterSpacing: -0.5,
+          ),
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(
+            color: AppColors.border,
+            height: 1,
           ),
         ),
         actions: [

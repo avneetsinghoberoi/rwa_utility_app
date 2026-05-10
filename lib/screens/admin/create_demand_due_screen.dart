@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
-import 'package:rms_app/config/app_config.dart';
-import 'package:rms_app/theme/app_theme.dart';
+import 'package:gate_basic/config/app_config.dart';
+import 'package:gate_basic/theme/app_theme.dart';
 
 class CreateDemandDueScreen extends StatefulWidget {
   const CreateDemandDueScreen({super.key});
@@ -148,11 +148,24 @@ class _CreateDemandDueScreenState extends State<CreateDemandDueScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Create Demand Due', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Create Demand Due',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+              letterSpacing: -0.5,
+            )),
         backgroundColor: Colors.white,
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
         surfaceTintColor: Colors.white,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(
+            color: AppColors.border,
+            height: 1,
+          ),
+        ),
       ),
       body: Form(
         key: _formKey,

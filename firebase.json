@@ -1,4 +1,18 @@
 {
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  },
   "firestore": {
     "rules": "firestore.rules"
   },
@@ -7,7 +21,7 @@
       "android": {
         "default": {
           "projectId": "rms-app-3d585",
-          "appId": "1:1085944093717:android:85eef057da5a129a2d421c",
+          "appId": "1:1085944093717:android:83c3164e885742b42d421c",
           "fileOutput": "android/app/google-services.json"
         }
       },
@@ -23,10 +37,20 @@
         "lib/firebase_options.dart": {
           "projectId": "rms-app-3d585",
           "configurations": {
-            "android": "1:1085944093717:android:85eef057da5a129a2d421c",
+            "android": "1:1085944093717:android:83c3164e885742b42d421c",
             "ios": "1:1085944093717:ios:43370b71e0f785532d421c",
-            "web": "1:1085944093717:web:ca6cafb339bb0a5e2d421c"
+            "macos": "1:1085944093717:ios:43370b71e0f785532d421c",
+            "web": "1:1085944093717:web:ca6cafb339bb0a5e2d421c",
+            "windows": "1:1085944093717:web:32d4cb19e56ae1572d421c"
           }
+        }
+      },
+      "macos": {
+        "default": {
+          "projectId": "rms-app-3d585",
+          "appId": "1:1085944093717:ios:43370b71e0f785532d421c",
+          "uploadDebugSymbols": true,
+          "fileOutput": "macos/Runner/GoogleService-Info.plist"
         }
       }
     }

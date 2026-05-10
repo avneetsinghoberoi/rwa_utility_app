@@ -1002,7 +1002,7 @@ async function sendWelcomeEmail({ toEmail, toName, houseNo, tempPassword }) {
             </table>
 
             <p style="color:#94a3b8;font-size:12px;margin:0;text-align:center;">
-              This is an automated message from the ${SOCIETY_NAME} RWA Manager app.<br>
+              This is an automated message from ${SOCIETY_NAME}.<br>
               Please do not reply to this email.
             </p>
           </td>
@@ -1015,7 +1015,7 @@ async function sendWelcomeEmail({ toEmail, toName, houseNo, tempPassword }) {
 </html>`;
 
   await transporter.sendMail({
-    from: `"${SOCIETY_NAME} RWA" <${process.env.EMAIL_USER}>`,
+    from: `"${SOCIETY_NAME}" <${process.env.EMAIL_USER}>`,
     to: toEmail,
     subject: `Welcome to ${SOCIETY_NAME} — Your Login Credentials`,
     html,

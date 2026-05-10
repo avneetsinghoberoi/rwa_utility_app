@@ -4,8 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:rms_app/screens/login/login_screen.dart';
-import 'package:rms_app/theme/app_theme.dart';
+import 'package:gate_basic/screens/login/login_screen.dart';
+import 'package:gate_basic/theme/app_theme.dart';
 
 class UserProfileScreen extends StatefulWidget {
   const UserProfileScreen({super.key});
@@ -196,11 +196,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     final rows = [
       _InfoEntry('Email', userData!['email']?.toString() ?? '-', Icons.email_outlined),
       _InfoEntry('Phone', userData!['phone']?.toString() ?? '-', Icons.phone_outlined),
-      _InfoEntry('Floor', userData!['floor']?.toString() ?? '-', Icons.layers_outlined),
-      _InfoEntry('Maintenance Status', userData!['maintenance_status']?.toString() ?? '-',
-          Icons.check_circle_outline),
-      _InfoEntry('Dues (₹)', '${userData!['dues'] ?? 0}',
-          Icons.account_balance_wallet_outlined),
       _InfoEntry('Last Payment', lastPayment, Icons.calendar_today_outlined),
     ];
 

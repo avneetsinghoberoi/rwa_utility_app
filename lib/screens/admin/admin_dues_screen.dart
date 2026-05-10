@@ -5,8 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
-import 'package:rms_app/config/app_config.dart';
-import 'package:rms_app/theme/app_theme.dart';
+import 'package:gate_basic/config/app_config.dart';
+import 'package:gate_basic/theme/app_theme.dart';
 
 import 'create_demand_due_screen.dart';
 
@@ -20,11 +20,24 @@ class AdminDuesScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Demand Dues', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Demand Dues',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+              letterSpacing: -0.5,
+            )),
         backgroundColor: Colors.white,
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
         surfaceTintColor: Colors.white,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(
+            color: AppColors.border,
+            height: 1,
+          ),
+        ),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),

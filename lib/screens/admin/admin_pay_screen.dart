@@ -5,8 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
-import 'package:rms_app/config/app_config.dart';
-import 'package:rms_app/theme/app_theme.dart';
+import 'package:gate_basic/config/app_config.dart';
+import 'package:gate_basic/theme/app_theme.dart';
 
 class AdminPayScreen extends StatefulWidget {
   const AdminPayScreen({super.key});
@@ -294,11 +294,23 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Payments',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+              letterSpacing: -0.5,
+            )),
         backgroundColor: Colors.white,
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
         surfaceTintColor: Colors.white,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(
+            color: AppColors.border,
+            height: 1,
+          ),
+        ),
         actions: [
           // Manual "Generate dues" button
           _generatingDues
@@ -727,14 +739,17 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
                     size: 18,
                   ),
                   const SizedBox(width: 6),
-                  Text(
-                    status == 'VERIFIED'
-                        ? 'Verified — invoice & receipt updated'
-                        : 'Rejected',
-                    style: TextStyle(
-                        color: statusColor,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13),
+                  Expanded(
+                    child: Text(
+                      status == 'VERIFIED'
+                          ? 'Verified — invoice & receipt updated'
+                          : 'Rejected',
+                      style: TextStyle(
+                          color: statusColor,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),

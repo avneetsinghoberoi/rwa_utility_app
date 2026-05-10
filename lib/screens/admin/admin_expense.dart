@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import 'package:rms_app/screens/login/login_screen.dart';
+import 'package:gate_basic/screens/login/login_screen.dart';
 
 class AdminExpenseScreen extends StatefulWidget {
   const AdminExpenseScreen({super.key});
@@ -44,11 +44,24 @@ class _AdminExpenseScreenState extends State<AdminExpenseScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4FF),
       appBar: AppBar(
-        title: const Text("Expense Manager", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text("Expense Manager",
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF0F172A),
+              letterSpacing: -0.5,
+            )),
         backgroundColor: Colors.white,
         foregroundColor: const Color(0xFF0F172A),
         elevation: 0,
         surfaceTintColor: Colors.white,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(
+            color: const Color(0xFFE5E7EB),
+            height: 1,
+          ),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),

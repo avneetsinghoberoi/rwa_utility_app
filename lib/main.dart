@@ -10,26 +10,50 @@ import 'services/notification_service.dart';
 import 'screens/login/login_screen.dart';
 import 'screens/admin/admin_dashboard.dart';
 import 'screens/user/dashboard.dart';
+import 'screens/splash/splash_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ✅ Correct Firebase initialization across all platforms
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  try {
+    // ✅ Correct Firebase initialization across all platforms
+    debugPrint("🔄 Initializing Firebase...");
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    debugPrint("✅ Firebase initialized successfully");
 
-  // Initialise FCM push notifications (requests permission, saves token,
-  // registers background handler and foreground listener).
-  await NotificationService.initialize();
+    // Initialise FCM push notifications (requests permission, saves token,
+    // registers background handler and foreground listener).
+    debugPrint("🔄 Initializing Notifications...");
+    await NotificationService.initialize();
+    debugPrint("✅ Notifications initialized successfully");
+  } catch (e, stackTrace) {
+    debugPrint("❌ Error during app initialization: $e");
+    debugPrint("Stack trace: $stackTrace");
+  }
 
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
-  /// ✅ Determines which screen to show first
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  bool _showSplash = true;
+  late Future<Widget> _landingPageFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _landingPageFuture = _getLandingPage();
+  }
+
+  /// ✅ Determines which screen to show first (after splash)
   Future<Widget> _getLandingPage() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -82,52 +106,60 @@ class MyApp extends StatelessWidget {
     }
   }
 
+  void _onSplashComplete() {
+    setState(() {
+      _showSplash = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'RWA Manager',
+      title: 'GateBasic',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
         colorSchemeSeed: const Color(0xFF2F80ED),
         textTheme: GoogleFonts.poppinsTextTheme(),
       ),
-      home: FutureBuilder<Widget>(
-        future: _getLandingPage(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(
-              backgroundColor: Colors.white,
-              body: Center(
-                child: CircularProgressIndicator(),
-              ),
-            );
-          } else if (snapshot.hasError) {
-            return Scaffold(
-              backgroundColor: Colors.white,
-              body: Center(
-                child: Text(
-                  'Something went wrong:\n${snapshot.error}',
-                  style: TextStyle(color: Colors.red, fontSize: 16),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            );
-          } else if (snapshot.hasData) {
-            return snapshot.data!;
-          } else {
-            return const Scaffold(
-              backgroundColor: Colors.white,
-              body: Center(
-                child: Text(
-                  'No screen found.\nPlease restart the app.',
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            );
-          }
-        },
-      ),
+      home: _showSplash
+          ? SplashScreen(onSplashComplete: _onSplashComplete)
+          : FutureBuilder<Widget>(
+              future: _landingPageFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Scaffold(
+                    backgroundColor: Colors.white,
+                    body: Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                } else if (snapshot.hasError) {
+                  return Scaffold(
+                    backgroundColor: Colors.white,
+                    body: Center(
+                      child: Text(
+                        'Something went wrong:\n${snapshot.error}',
+                        style: const TextStyle(color: Colors.red, fontSize: 16),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  );
+                } else if (snapshot.hasData) {
+                  return snapshot.data!;
+                } else {
+                  return const Scaffold(
+                    backgroundColor: Colors.white,
+                    body: Center(
+                      child: Text(
+                        'No screen found.\nPlease restart the app.',
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  );
+                }
+              },
+            ),
     );
   }
 }

@@ -26,50 +26,74 @@ class NotificationService {
 
   /// Call once after Firebase.initializeApp() in main().
   static Future<void> initialize() async {
-    // 1️⃣  Register background message handler (must be set before the app
-    //     is fully running so the isolate can pick it up).
-    FirebaseMessaging.onBackgroundMessage(_fcmBackgroundHandler);
+    try {
+      // 1️⃣  Register background message handler (must be set before the app
+      //     is fully running so the isolate can pick it up).
+      FirebaseMessaging.onBackgroundMessage(_fcmBackgroundHandler);
 
-    // 2️⃣  Create the Android notification channel (no-op on iOS).
-    await _plugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(_kChannel);
+      // 2️⃣  Create the Android notification channel (no-op on iOS).
+      try {
+        await _plugin
+            .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin>()
+            ?.createNotificationChannel(_kChannel);
+      } catch (e) {
+        debugPrint('[Notification] Channel creation error (non-critical): $e');
+      }
 
-    // 3️⃣  Initialise the local notifications plugin.
-    await _plugin.initialize(
-      const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-        iOS: DarwinInitializationSettings(),
-      ),
-    );
+      // 3️⃣  Initialise the local notifications plugin.
+      try {
+        await _plugin.initialize(
+          const InitializationSettings(
+            android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+            iOS: DarwinInitializationSettings(),
+          ),
+        );
+      } catch (e) {
+        debugPrint('[Notification] Plugin initialization error (non-critical): $e');
+      }
 
-    // 4️⃣  Request permission (critical on iOS; Android 13+ uses the manifest
-    //     POST_NOTIFICATIONS permission but the runtime request is still needed).
-    await FirebaseMessaging.instance.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
+      // 4️⃣  Request permission (critical on iOS; Android 13+ uses the manifest
+      //     POST_NOTIFICATIONS permission but the runtime request is still needed).
+      try {
+        await FirebaseMessaging.instance.requestPermission(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+      } catch (e) {
+        debugPrint('[Notification] Permission request error (non-critical): $e');
+      }
 
-    // 5️⃣  iOS: show notifications while the app is in the foreground.
-    await FirebaseMessaging.instance
-        .setForegroundNotificationPresentationOptions(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
+      // 5️⃣  iOS: show notifications while the app is in the foreground.
+      try {
+        await FirebaseMessaging.instance
+            .setForegroundNotificationPresentationOptions(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+      } catch (e) {
+        debugPrint('[Notification] Foreground options error (non-critical): $e');
+      }
 
-    // 6️⃣  Listen for foreground messages and show a local notification.
-    FirebaseMessaging.onMessage.listen(_showLocalNotification);
+      // 6️⃣  Listen for foreground messages and show a local notification.
+      FirebaseMessaging.onMessage.listen(_showLocalNotification);
 
-    // 7️⃣  Save FCM token whenever the user is (or becomes) signed in.
-    FirebaseAuth.instance.authStateChanges().listen((user) {
-      if (user != null) saveToken();
-    });
+      // 7️⃣  Save FCM token whenever the user is (or becomes) signed in.
+      FirebaseAuth.instance.authStateChanges().listen((user) {
+        if (user != null) saveToken();
+      });
 
-    // Refresh token automatically when FCM rotates it.
-    FirebaseMessaging.instance.onTokenRefresh.listen((_) => saveToken());
+      // Refresh token automatically when FCM rotates it.
+      FirebaseMessaging.instance.onTokenRefresh.listen((_) => saveToken());
+
+      debugPrint('✅ NotificationService initialized successfully');
+    } catch (e, stackTrace) {
+      debugPrint('❌ NotificationService initialization error: $e');
+      debugPrint('Stack trace: $stackTrace');
+      // Don't rethrow - allow app to continue without notifications
+    }
   }
 
   // ── Show a heads-up notification while the app is in the foreground ──────

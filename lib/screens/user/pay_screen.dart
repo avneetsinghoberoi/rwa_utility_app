@@ -5,7 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:rms_app/theme/app_theme.dart';
+import 'package:gate_basic/theme/app_theme.dart';
 import 'receipt_pdf_service.dart';
 
 class UserPayScreen extends StatefulWidget {
@@ -116,13 +116,31 @@ class _UserPayScreenState extends State<UserPayScreen> {
     final houseNo = (userData['house_no'] ?? '').toString();
 
     try {
+      // ✅ UPLOAD PROOF FIRST (before creating payment)
+      String? proofUrl;
+      if (proofImage != null) {
+        setState(() => uploadingProof = true);
+        try {
+          final ref = FirebaseStorage.instance
+              .ref()
+              .child('proofs')
+              .child(user!.uid)
+              .child('${DateTime.now().millisecondsSinceEpoch}.jpg');
+
+          await ref.putFile(proofImage!);
+          proofUrl = await ref.getDownloadURL();
+        } finally {
+          if (mounted) setState(() => uploadingProof = false);
+        }
+      }
+
       final invoiceType = widget.invoiceType ?? 'MAINTENANCE';
       final purpose = widget.invoiceTitle?.isNotEmpty == true
           ? widget.invoiceTitle!
           : (invoiceType == 'DEMAND' ? 'Special Due' : 'Monthly Maintenance');
 
-      final payRef =
-          await FirebaseFirestore.instance.collection('payments').add({
+      // ✅ CREATE PAYMENT WITH PROOF URL INCLUDED (single write)
+      await FirebaseFirestore.instance.collection('payments').add({
         'uid': user!.uid,
         'amount': amount,
         'utr': utr,
@@ -134,12 +152,8 @@ class _UserPayScreenState extends State<UserPayScreen> {
         'invoice_type': invoiceType,
         'purpose': purpose,
         if (widget.invoiceId != null) 'invoice_id': widget.invoiceId,
+        if (proofUrl != null) 'proof_url': proofUrl,  // ← INCLUDE HERE
       });
-
-      final proofUrl = await _uploadProofIfAny(payRef.id);
-      if (proofUrl != null) {
-        await payRef.update({'proof_url': proofUrl});
-      }
 
       setState(() => proofImage = null);
       txnCtrl.clear();
@@ -235,11 +249,23 @@ class _UserPayScreenState extends State<UserPayScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Pay Maintenance',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+              letterSpacing: -0.5,
+            )),
         backgroundColor: Colors.white,
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
         surfaceTintColor: Colors.white,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(
+            color: AppColors.border,
+            height: 1,
+          ),
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),

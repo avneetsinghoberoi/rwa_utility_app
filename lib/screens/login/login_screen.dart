@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:rms_app/screens/user/dashboard.dart';
-import 'package:rms_app/screens/admin/admin_dashboard.dart';
-import 'package:rms_app/theme/app_theme.dart';
+import 'package:gate_basic/screens/user/dashboard.dart';
+import 'package:gate_basic/screens/admin/admin_dashboard.dart';
+import 'package:gate_basic/theme/app_theme.dart';
+import 'dart:ui';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -12,15 +13,49 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin {
   bool isResident = true;
   bool _isLoading = false;
   bool _obscurePassword = true;
 
+  late AnimationController _logoController;
+  late Animation<double> _logoScale;
+  late Animation<double> _logoOpacity;
+
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
-  // ── Login Logic (unchanged) ─────────────────────────────────────
+  @override
+  void initState() {
+    super.initState();
+    _initializeAnimations();
+  }
+
+  void _initializeAnimations() {
+    _logoController = AnimationController(
+      duration: const Duration(milliseconds: 1400),
+      vsync: this,
+    );
+
+    _logoScale = Tween<double>(begin: 0.7, end: 1.0).animate(
+      CurvedAnimation(parent: _logoController, curve: Curves.elasticOut),
+    );
+
+    _logoOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _logoController, curve: Curves.easeIn),
+    );
+
+    _logoController.forward();
+  }
+
+  @override
+  void dispose() {
+    _logoController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loginUser() async {
     setState(() => _isLoading = true);
 
@@ -41,10 +76,9 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      // Include firestoreDocId so invoice queries work correctly
-      final doc      = snapshot.docs.first;
+      final doc = snapshot.docs.first;
       final userData = {...doc.data(), 'firestoreDocId': doc.id};
-      final role     = userData['role'] ?? 'user';
+      final role = userData['role'] ?? 'user';
 
       if (role == 'admin') {
         Navigator.pushReplacement(
@@ -158,261 +192,407 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // ── Build ───────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-
     return Scaffold(
-      body: Stack(
-        children: [
-          // ── Background gradient ──────────────────────────────────
-          Container(
-            height: size.height * 0.52,
-            decoration: const BoxDecoration(gradient: AppTheme.primaryGradient),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF0F172A),
+              Color(0xFF1E40AF),
+              Color(0xFF2563EB),
+            ],
+            stops: [0.0, 0.5, 1.0],
           ),
-
-          // ── Decorative circle accents ─────────────────────────
-          Positioned(
-            top: -80,
-            right: -80,
-            child: Container(
-              width: 220,
-              height: 220,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.07),
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-          Positioned(
-            top: 60,
-            left: -50,
-            child: Container(
-              width: 140,
-              height: 140,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-
-          // ── Main content ──────────────────────────────────────
-          SafeArea(
-            child: Column(
-              children: [
-                // ── Hero section ─────────────────────────────────
-                Expanded(
-                  flex: 5,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // Logo
-                        Container(
-                          width: 84,
-                          height: 84,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.18),
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.35),
-                              width: 2,
-                            ),
-                          ),
-                          child: ClipOval(
-                            child: Image.asset(
-                              'assets/logo_rwa_app.png',
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => const Icon(
-                                Icons.apartment_rounded,
-                                size: 42,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        const Text(
-                          'RWA Manager',
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                            letterSpacing: 0.4,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Your community, simplified',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.white.withOpacity(0.8),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+        ),
+        child: Stack(
+          children: [
+            // Background decoration circles
+            Positioned(
+              top: -120,
+              right: -80,
+              child: Container(
+                width: 320,
+                height: 320,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withOpacity(0.08),
                 ),
+              ),
+            ),
+            Positioned(
+              top: 100,
+              left: -100,
+              child: Container(
+                width: 240,
+                height: 240,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withOpacity(0.06),
+                ),
+              ),
+            ),
+            Positioned(
+              bottom: -60,
+              right: -50,
+              child: Container(
+                width: 280,
+                height: 280,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withOpacity(0.05),
+                ),
+              ),
+            ),
 
-                // ── Form card ────────────────────────────────────
-                Container(
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(32),
-                      topRight: Radius.circular(32),
-                    ),
-                  ),
-                  padding: EdgeInsets.only(
-                    left: 28,
-                    right: 28,
-                    top: 32,
-                    bottom: MediaQuery.of(context).viewInsets.bottom + 28,
-                  ),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Heading
-                        const Text(
-                          'Sign In',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'Welcome back! Please sign in to continue.',
-                          style: TextStyle(
-                              fontSize: 13, color: AppColors.textSecondary),
-                        ),
-                        const SizedBox(height: 24),
-
-                        // ── Resident / Admin pill toggle ────────
-                        _buildRoleToggle(),
-                        const SizedBox(height: 20),
-
-                        // ── Email field ─────────────────────────
-                        TextField(
-                          controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
-                          decoration: AppTheme.inputDecoration(
-                              'Email Address', Icons.email_outlined),
-                        ),
-                        const SizedBox(height: 14),
-
-                        // ── Password field ──────────────────────
-                        TextField(
-                          controller: _passwordController,
-                          obscureText: _obscurePassword,
-                          decoration: AppTheme.inputDecoration(
-                            'Password',
-                            Icons.lock_outline_rounded,
-                          ).copyWith(
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _obscurePassword
-                                    ? Icons.visibility_off_outlined
-                                    : Icons.visibility_outlined,
-                                color: AppColors.textSecondary,
-                                size: 20,
+            SafeArea(
+              child: Column(
+                children: [
+                  // Hero Section
+                  Expanded(
+                    flex: 45,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          // Animated Logo
+                          AnimatedBuilder(
+                            animation: Listenable.merge([_logoScale, _logoOpacity]),
+                            builder: (context, child) => Opacity(
+                              opacity: _logoOpacity.value,
+                              child: Transform.scale(
+                                scale: _logoScale.value,
+                                child: child,
                               ),
-                              onPressed: () => setState(
-                                  () => _obscurePassword = !_obscurePassword),
                             ),
+                            child: _buildEnhancedLogo(),
                           ),
-                        ),
-                        const SizedBox(height: 8),
 
-                        // ── Forgot password ─────────────────────
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed: _showForgotPassword,
-                            style: TextButton.styleFrom(
-                              foregroundColor: AppColors.primary,
-                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            child: const Text(
-                              'Forgot Password?',
-                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
+                          const SizedBox(height: 20),
 
-                        // ── Login button ────────────────────────
-                        _isLoading
-                            ? const Center(
-                                child: Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 14),
-                                  child: CircularProgressIndicator(),
+                          // Brand Name
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Text(
+                                'GATE',
+                                style: TextStyle(
+                                  fontSize: 40,
+                                  fontWeight: FontWeight.w300,
+                                  color: Colors.white,
+                                  letterSpacing: 2.0,
                                 ),
-                              )
-                            : AppTheme.gradientButton(
-                                label:
-                                    'Login as ${isResident ? 'Resident' : 'Admin'}',
-                                onTap: _loginUser,
-                                height: 52,
-                                icon: Icons.login_rounded,
                               ),
-                      ],
+                              const SizedBox(width: 12),
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.8),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              const Text(
+                                'BASIC',
+                                style: TextStyle(
+                                  fontSize: 40,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                  letterSpacing: 0.8,
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          // Tagline with Glass Effect
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                  vertical: 12,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: Colors.white.withOpacity(0.2),
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: Text(
+                                  'Smart Living, Simplified',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.white.withOpacity(0.9),
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+
+                  // Form Card
+                  Expanded(
+                    flex: 55,
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(40),
+                        topRight: Radius.circular(40),
+                      ),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.95),
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(40),
+                              topRight: Radius.circular(40),
+                            ),
+                            border: Border(
+                              top: BorderSide(
+                                color: Colors.white.withOpacity(0.3),
+                                width: 1.5,
+                              ),
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.15),
+                                blurRadius: 30,
+                                offset: const Offset(0, -5),
+                              ),
+                            ],
+                          ),
+                          child: SingleChildScrollView(
+                            padding: EdgeInsets.only(
+                              left: 28,
+                              right: 28,
+                              top: 20,
+                              bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text(
+                                  'Welcome',
+                                  style: TextStyle(
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.textPrimary,
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Sign in to access your account',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.textSecondary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+
+                                // Role Toggle
+                                _buildEnhancedRoleToggle(),
+                                const SizedBox(height: 16),
+
+                                // Email Field
+                                _buildEnhancedInputField(
+                                  controller: _emailController,
+                                  label: 'Email Address',
+                                  icon: Icons.email_rounded,
+                                  keyboardType: TextInputType.emailAddress,
+                                ),
+                                const SizedBox(height: 12),
+
+                                // Password Field
+                                _buildEnhancedInputField(
+                                  controller: _passwordController,
+                                  label: 'Password',
+                                  icon: Icons.lock_rounded,
+                                  obscureText: _obscurePassword,
+                                  suffixIcon: GestureDetector(
+                                    onTap: () {
+                                      setState(() =>
+                                          _obscurePassword = !_obscurePassword);
+                                    },
+                                    child: Icon(
+                                      _obscurePassword
+                                          ? Icons.visibility_off_rounded
+                                          : Icons.visibility_rounded,
+                                      color: AppColors.primary.withOpacity(0.6),
+                                      size: 20,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+
+                                // Forgot Password
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: GestureDetector(
+                                    onTap: _showForgotPassword,
+                                    child: Text(
+                                      'Forgot Password?',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.primary,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+
+                                // Login Button
+                                _buildEnhancedLoginButton(),
+                                const SizedBox(height: 16),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  // ── Role Toggle ──────────────────────────────────────────────────
-  Widget _buildRoleToggle() {
+  // Enhanced Input Field
+  Widget _buildEnhancedInputField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    TextInputType keyboardType = TextInputType.text,
+    bool obscureText = false,
+    Widget? suffixIcon,
+  }) {
+    return TextField(
+      controller: controller,
+      keyboardType: keyboardType,
+      obscureText: obscureText,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, color: AppColors.primary.withOpacity(0.7)),
+        suffixIcon: suffixIcon,
+        filled: true,
+        fillColor: AppColors.primaryLight.withOpacity(0.6),
+        labelStyle: TextStyle(
+          color: AppColors.textSecondary,
+          fontWeight: FontWeight.w500,
+        ),
+        floatingLabelStyle: const TextStyle(
+          color: AppColors.primary,
+          fontWeight: FontWeight.w700,
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+            color: AppColors.primary.withOpacity(0.1),
+            width: 1.5,
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(
+            color: AppColors.primary,
+            width: 2,
+          ),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(
+            color: AppColors.error,
+            width: 2,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Enhanced Role Toggle
+  Widget _buildEnhancedRoleToggle() {
     return Container(
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(5),
       decoration: BoxDecoration(
         color: AppColors.primaryLight,
-        borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: AppColors.primary.withOpacity(0.2),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withOpacity(0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         children: [
-          _toggleOption(0, 'Resident', Icons.home_outlined),
-          _toggleOption(1, 'Admin', Icons.admin_panel_settings_outlined),
+          _buildRoleOption('Resident', Icons.home_rounded, true),
+          _buildRoleOption('Admin', Icons.admin_panel_settings_rounded, false),
         ],
       ),
     );
   }
 
-  Widget _toggleOption(int index, String label, IconData icon) {
-    final selected = (index == 0) == isResident;
+  Widget _buildRoleOption(String label, IconData icon, bool isResident) {
+    final selected = (isResident && this.isResident) || (!isResident && !this.isResident);
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => isResident = index == 0),
+        onTap: () => setState(() => this.isResident = isResident),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
+          duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
-          padding: const EdgeInsets.symmetric(vertical: 10),
+          padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
             gradient: selected ? AppTheme.primaryGradient : null,
-            borderRadius: BorderRadius.circular(26),
-            boxShadow: selected ? AppTheme.primaryShadow : [],
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: AppColors.primary.withOpacity(0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : [],
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
                 icon,
-                size: 16,
+                size: 18,
                 color: selected ? Colors.white : AppColors.textSecondary,
               ),
               const SizedBox(width: 6),
@@ -420,7 +600,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 label,
                 style: TextStyle(
                   fontSize: 13,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
                   color: selected ? Colors.white : AppColors.textSecondary,
                 ),
               ),
@@ -431,10 +611,102 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
+  // Enhanced Login Button
+  Widget _buildEnhancedLoginButton() {
+    return GestureDetector(
+      onTap: _isLoading ? null : _loginUser,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        height: 56,
+        decoration: BoxDecoration(
+          gradient: _isLoading || _emailController.text.isEmpty
+              ? LinearGradient(
+                  colors: [
+                    Colors.grey.withOpacity(0.4),
+                    Colors.grey.withOpacity(0.3),
+                  ],
+                )
+              : AppTheme.primaryGradient,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: _isLoading
+              ? []
+              : [
+                  BoxShadow(
+                    color: AppColors.primary.withOpacity(0.3),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+        ),
+        child: Center(
+          child: _isLoading
+              ? SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation(
+                      Colors.white.withOpacity(0.8),
+                    ),
+                    strokeWidth: 2.5,
+                  ),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.login_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Login as ${isResident ? 'Resident' : 'Admin'}',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
+
+  // Enhanced Logo Widget (Square)
+  Widget _buildEnhancedLogo() {
+    return Container(
+      width: 110,
+      height: 110,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Image.asset(
+          'assets/logo_rwa_app.png',
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Container(
+            decoration: const BoxDecoration(
+              gradient: AppTheme.primaryGradient,
+            ),
+            child: const Icon(
+              Icons.apartment_rounded,
+              size: 50,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
