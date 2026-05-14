@@ -75,19 +75,15 @@ class _AdminNoticesScreenState extends State<AdminNoticesScreen> {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
-            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-              return const Center(
-                  child: Text("No notices posted yet.",
-                      style: TextStyle(color: Colors.grey)));
-            }
 
-            final notices = snapshot.data!.docs;
+            final notices = snapshot.data?.docs ?? [];
+            final hasError = snapshot.hasError;
 
             return SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  // Header section
+                  // Header section - ALWAYS VISIBLE
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -109,17 +105,38 @@ class _AdminNoticesScreenState extends State<AdminNoticesScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // List of notices
-                  ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: notices.length,
-                    itemBuilder: (context, index) {
-                      final data =
-                      notices[index].data() as Map<String, dynamic>;
-                      return _noticeCard(data);
-                    },
-                  ),
+                  // Show error if any
+                  if (hasError)
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        "Error loading notices: ${snapshot.error}",
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    ),
+
+                  // List of notices or empty state
+                  if (notices.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(32),
+                      child: Text("No notices posted yet.",
+                          style: TextStyle(color: Colors.grey, fontSize: 16)),
+                    )
+                  else
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: notices.length,
+                      itemBuilder: (context, index) {
+                        final data =
+                        notices[index].data() as Map<String, dynamic>;
+                        return _noticeCard(data);
+                      },
+                    ),
                 ],
               ),
             );

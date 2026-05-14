@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -80,6 +81,7 @@ class _UserPayScreenState extends State<UserPayScreen> {
     setState(() => proofImage = File(x.path));
   }
 
+  /// ✅ IMPROVED: Better error handling for image uploads
   Future<String?> _uploadProofIfAny(String paymentDocId) async {
     if (proofImage == null || user == null) return null;
 
@@ -91,11 +93,50 @@ class _UserPayScreenState extends State<UserPayScreen> {
           .child(user!.uid)
           .child('$paymentDocId.jpg');
 
-      await ref.putFile(proofImage!);
+      // Upload with metadata and timeout
+      await ref.putFile(
+        proofImage!,
+        SettableMetadata(
+          customMetadata: {
+            'uploadedAt': DateTime.now().toString(),
+            'uploadedBy': user!.uid,
+          },
+        ),
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw TimeoutException('Upload took too long (30s). Check internet connection.');
+        },
+      );
+
       return await ref.getDownloadURL();
+    } on FirebaseException catch (e) {
+      debugPrint('Firebase Storage error: ${e.code} - ${e.message}');
+      throw Exception('Storage error: ${e.code}');
     } finally {
       if (mounted) setState(() => uploadingProof = false);
     }
+  }
+
+  /// ✅ IMPROVED: Validate image before upload
+  bool _validateProofImage() {
+    if (proofImage == null) return true; // optional field
+
+    // Check file size
+    final fileSize = proofImage!.lengthSync();
+    if (fileSize > 10 * 1024 * 1024) {
+      _showSnack('Image too large (max 10MB). Please compress and try again.', isError: true);
+      return false;
+    }
+
+    // Check file format
+    final ext = proofImage!.path.toLowerCase().split('.').last;
+    if (!['jpg', 'jpeg', 'png'].contains(ext)) {
+      _showSnack('Only JPG and PNG images are allowed.', isError: true);
+      return false;
+    }
+
+    return true;
   }
 
   Future<void> _submitPayment() async {
@@ -113,6 +154,11 @@ class _UserPayScreenState extends State<UserPayScreen> {
       return;
     }
 
+    // ✅ IMPROVED: Validate proof image
+    if (!_validateProofImage()) {
+      return;
+    }
+
     final houseNo = (userData['house_no'] ?? '').toString();
 
     try {
@@ -127,8 +173,29 @@ class _UserPayScreenState extends State<UserPayScreen> {
               .child(user!.uid)
               .child('${DateTime.now().millisecondsSinceEpoch}.jpg');
 
-          await ref.putFile(proofImage!);
+          await ref.putFile(
+            proofImage!,
+            SettableMetadata(
+              customMetadata: {
+                'uploadedAt': DateTime.now().toString(),
+                'uploadedBy': user!.uid,
+              },
+            ),
+          ).timeout(
+            const Duration(seconds: 30),
+            onTimeout: () {
+              throw TimeoutException('Upload timeout. Check your internet connection.');
+            },
+          );
+
           proofUrl = await ref.getDownloadURL();
+          debugPrint('✅ Proof uploaded successfully: $proofUrl');
+        } on TimeoutException catch (e) {
+          _showSnack('Upload timeout. Please check your internet and try again.', isError: true);
+          return;
+        } on FirebaseException catch (e) {
+          _handleStorageError(e);
+          return;
         } finally {
           if (mounted) setState(() => uploadingProof = false);
         }
@@ -162,7 +229,33 @@ class _UserPayScreenState extends State<UserPayScreen> {
       _showSnack('Payment submitted ✅ Waiting for admin verification.');
     } catch (e) {
       _showSnack('Failed: $e', isError: true);
+      debugPrint('Payment submission error: $e');
     }
+  }
+
+  /// ✅ IMPROVED: Better error handling
+  void _handleStorageError(FirebaseException e) {
+    String errorMsg = 'Upload failed';
+
+    switch (e.code) {
+      case 'permission-denied':
+        errorMsg = 'You do not have permission to upload files. Contact administrator.';
+        break;
+      case 'unauthenticated':
+        errorMsg = 'Please log in again to upload proof.';
+        break;
+      case 'canceled':
+        errorMsg = 'Upload was canceled. Please try again.';
+        break;
+      case 'retry-limit-exceeded':
+        errorMsg = 'Upload failed after multiple retries. Check your connection.';
+        break;
+      default:
+        errorMsg = 'Upload error: ${e.code}. ${e.message ?? ""}';
+    }
+
+    _showSnack(errorMsg, isError: true);
+    debugPrint('🔴 Firebase Storage Error: ${e.code} - ${e.message}');
   }
 
   Widget _buildInvoiceBanner(String name) {

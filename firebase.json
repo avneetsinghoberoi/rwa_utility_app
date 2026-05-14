@@ -16,6 +16,12 @@
   "firestore": {
     "rules": "firestore.rules"
   },
+  "storage": [
+    {
+      "bucket": "rms-app-3d585.appspot.com",
+      "rules": "storage.rules"
+    }
+  ],
   "flutter": {
     "platforms": {
       "android": {

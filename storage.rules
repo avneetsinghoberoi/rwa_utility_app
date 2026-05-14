@@ -1,0 +1,30 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // ── Proofs (Payment screenshots) ──────────────────────────────────
+    // Users can upload their own payment proofs
+    // Users can read their own; admins can read all
+    match /proofs/{userId}/{filename} {
+      allow read: if request.auth.uid == userId ||
+                     isAdmin();
+      allow write: if request.auth.uid == userId && isValidProofUpload();
+      allow delete: if request.auth.uid == userId || isAdmin();
+    }
+
+    // ── Helper functions ──────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+             firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Validate proof upload
+    function isValidProofUpload() {
+      return request.resource.size < 10 * 1024 * 1024 && // Max 10MB
+             request.resource.contentType.matches('image/(jpeg|png|jpg)');
+    }
+  }
+}

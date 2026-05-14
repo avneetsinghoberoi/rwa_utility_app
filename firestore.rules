@@ -71,8 +71,10 @@ service cloud.firestore {
     }
 
     // ── expenses ──────────────────────────────────────────────────────────────
+    // All residents can read expenses (for breakdown view); only admins can write
     match /expenses/{expenseId} {
-      allow read, write: if isAdmin();
+      allow read:  if isSignedIn();
+      allow write: if isAdmin();
     }
 
     // ── issues ────────────────────────────────────────────────────────────────
