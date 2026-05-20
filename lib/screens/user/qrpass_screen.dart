@@ -6,15 +6,16 @@ import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:gate_basic/screens/login/login_screen.dart';
 import 'package:gate_basic/theme/app_theme.dart';
+import '../../utils/dashboard_key.dart';
 
-class UserProfileScreen extends StatefulWidget {
-  const UserProfileScreen({super.key});
+class QrPassScreen extends StatefulWidget {
+  const QrPassScreen({super.key});
 
   @override
-  State<UserProfileScreen> createState() => _UserProfileScreenState();
+  State<QrPassScreen> createState() => _QrPassScreenState();
 }
 
-class _UserProfileScreenState extends State<UserProfileScreen> {
+class _QrPassScreenState extends State<QrPassScreen> {
   Map<String, dynamic>? userData;
   bool isLoading = true;
 
@@ -24,21 +25,28 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     fetchUserData();
   }
 
-  // ── Fetch user data (logic unchanged) ─────────────────────────
+  // Fetch by UID — works with existing security rules (no collection query needed)
   Future<void> fetchUserData() async {
-    final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) return;
+    // On web, currentUser can briefly be null while Firebase restores the session.
+    // Wait for the first auth state emission so we always get a valid user.
+    final firebaseUser = FirebaseAuth.instance.currentUser ??
+        await FirebaseAuth.instance.authStateChanges().first;
+
+    if (firebaseUser == null) {
+      if (mounted) setState(() => isLoading = false);
+      return;
+    }
 
     try {
-      final querySnapshot = await FirebaseFirestore.instance
+      final doc = await FirebaseFirestore.instance
           .collection('users')
-          .where('email', isEqualTo: currentUser.email)
-          .limit(1)
+          .doc(firebaseUser.uid)
           .get();
 
-      if (querySnapshot.docs.isNotEmpty) {
+      if (!mounted) return;
+      if (doc.exists) {
         setState(() {
-          userData = querySnapshot.docs.first.data();
+          userData = doc.data();
           isLoading = false;
         });
       } else {
@@ -49,7 +57,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       }
     } catch (e) {
       debugPrint('Error fetching user data: $e');
-      setState(() => isLoading = false);
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
@@ -65,9 +73,22 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           body: Center(child: Text('No user data found.')));
     }
 
-    final name = userData!['name'] ?? 'Unknown User';
-    final houseNo = userData!['house_no'] ?? '-';
+    final name = (userData!['name'] ?? 'Unknown User').toString();
+    // Admin-created residents store house_no at top level;
+    // account-sharing users store it inside unit_info.
+    final houseNo = (userData!['house_no']
+            ?? (userData!['unit_info'] as Map?)?['house_no']
+            ?? '-').toString();
     final initials = name.isNotEmpty ? name[0].toUpperCase() : '?';
+
+    // Relationship label for tenants/family (null for primary owners)
+    final _accountLink = userData!['account_link'] as Map?;
+    final _linkedAs = _accountLink?['primary_owner_uid'] != null
+        ? (_accountLink?['linked_as']?.toString() ?? 'tenant')
+        : null;
+    final _roleLabel = _linkedAs != null
+        ? '${_linkedAs[0].toUpperCase()}${_linkedAs.substring(1)}'
+        : null;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -78,6 +99,22 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             expandedHeight: 200,
             pinned: true,
             backgroundColor: AppColors.primaryDark,
+            leading: Navigator.canPop(context)
+                ? IconButton(
+                    icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                  )
+                : IconButton(
+                    icon: const Icon(Icons.menu_rounded, color: Colors.white),
+                    onPressed: () => dashboardScaffoldKey.currentState?.openDrawer(),
+                  ),
+            actions: [
+              if (Navigator.canPop(context))
+                IconButton(
+                  icon: const Icon(Icons.menu_rounded, color: Colors.white),
+                  onPressed: () => dashboardScaffoldKey.currentState?.openDrawer(),
+                ),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
                 decoration:
@@ -136,11 +173,37 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                             ),
                           ),
                           const SizedBox(height: 4),
-                          Text(
-                            'House No. $houseNo',
-                            style: TextStyle(
-                                color: Colors.white.withOpacity(0.8),
-                                fontSize: 13),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'House No. $houseNo',
+                                style: TextStyle(
+                                    color: Colors.white.withOpacity(0.8),
+                                    fontSize: 13),
+                              ),
+                              if (_roleLabel != null) ...[
+                                Text('  ·  ',
+                                    style: TextStyle(
+                                        color: Colors.white.withOpacity(0.5),
+                                        fontSize: 13)),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 7, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.18),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    _roleLabel,
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ],
                       ),

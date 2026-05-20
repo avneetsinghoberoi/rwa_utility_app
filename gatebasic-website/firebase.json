@@ -1,0 +1,15 @@
+{
+  "hosting": [
+    {
+      "target": "app",
+      "public": "../build/web",
+      "ignore": ["firebase.json", "**/.*"],
+      "rewrites": [{ "source": "**", "destination": "/index.html" }]
+    },
+    {
+      "target": "marketing",
+      "public": "public",
+      "ignore": ["firebase.json", "**/.*"]
+    }
+  ]
+}

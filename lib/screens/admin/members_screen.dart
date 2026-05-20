@@ -11,6 +11,7 @@ import 'package:gate_basic/config/app_config.dart';
 import 'package:gate_basic/screens/admin/report_pdf_service.dart';
 import 'package:gate_basic/screens/login/login_screen.dart';
 import 'package:gate_basic/theme/app_theme.dart';
+import 'package:gate_basic/utils/admin_dashboard_key.dart';
 
 class MembersScreen extends StatefulWidget {
   const MembersScreen({super.key});
@@ -24,6 +25,25 @@ class _MembersScreenState extends State<MembersScreen> {
 
   bool _deleting = false;
   bool _generatingReport = false;
+
+  // ── Search + filter state ──────────────────────────────────────────────────
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _searchQuery = '';
+  bool _showOwners = true; // true = Owners tab, false = Others tab
+
+  @override
+  void initState() {
+    super.initState();
+    _searchCtrl.addListener(() {
+      setState(() => _searchQuery = _searchCtrl.text.toLowerCase().trim());
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
 
   String _monthKey() {
     final now = DateTime.now();
@@ -432,6 +452,40 @@ class _MembersScreenState extends State<MembersScreen> {
     ));
   }
 
+  // ── Toggle tab button ──────────────────────────────────────────────────────
+  Widget _toggleTab(String label, IconData icon,
+      {required bool isSelected, required VoidCallback onTap}) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: isSelected ? AppColors.primary : Colors.transparent,
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 16,
+                  color: isSelected ? Colors.white : AppColors.textSecondary),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: isSelected ? Colors.white : AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   // ── Status chip ────────────────────────────────────────────────────────────
   Widget _statusChip(String? status) {
     Color bg; Color fg; String label;
@@ -465,6 +519,15 @@ class _MembersScreenState extends State<MembersScreen> {
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
         surfaceTintColor: Colors.white,
+        leading: Navigator.canPop(context)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: () => Navigator.pop(context),
+              )
+            : IconButton(
+                icon: const Icon(Icons.menu_rounded),
+                onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer(),
+              ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(
@@ -473,6 +536,11 @@ class _MembersScreenState extends State<MembersScreen> {
           ),
         ),
         actions: [
+          if (Navigator.canPop(context))
+            IconButton(
+              icon: const Icon(Icons.menu_rounded),
+              onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer(),
+            ),
           // Download report
           _generatingReport
               ? const Padding(
@@ -484,45 +552,49 @@ class _MembersScreenState extends State<MembersScreen> {
                   tooltip: 'Download Dues Report',
                   onPressed: _openReportFlow,
                 ),
-          IconButton(
-            icon: const Icon(Icons.logout_rounded),
-            onPressed: () => Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(builder: (_) => const LoginScreen()),
-              (route) => false,
-            ),
-          ),
         ],
       ),
       body: Stack(
         children: [
           Column(
             children: [
-              // ── Header ──────────────────────────────────────────────────
+              // ── Header: count + add button ───────────────────────────
               Container(
                 color: Colors.white,
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                 child: Row(
                   children: [
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          StreamBuilder<QuerySnapshot>(
-                            stream: FirebaseFirestore.instance
-                                .collection('users')
-                                .where('role', isEqualTo: 'user')
-                                .snapshots(),
-                            builder: (_, snap) {
-                              final count = snap.data?.docs.length ?? 0;
-                              return Text(
-                                '$count Residents',
+                      child: StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('users')
+                            .where('role', whereIn: ['user', 'resident'])
+                            .snapshots(),
+                        builder: (_, snap) {
+                          final docs = snap.data?.docs ?? [];
+                          int ownerCount = 0;
+                          int tenantCount = 0;
+                          for (final d in docs) {
+                            final data = d.data() as Map<String, dynamic>;
+                            if ((data['status']?.toString() ?? 'active') == 'removed') continue;
+                            final link = data['account_link'] as Map?;
+                            if (link == null || link['primary_owner_uid'] == null) ownerCount++;
+                            else tenantCount++;
+                          }
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${ownerCount + tenantCount} Members',
                                 style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                              );
-                            },
-                          ),
-                          const Text('Manage resident accounts', style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
-                        ],
+                              ),
+                              Text(
+                                '$ownerCount owners · $tenantCount tenants/family',
+                                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                     ),
                     ElevatedButton.icon(
@@ -540,6 +612,64 @@ class _MembersScreenState extends State<MembersScreen> {
                   ],
                 ),
               ),
+
+              // ── Search bar ───────────────────────────────────────────
+              Container(
+                color: Colors.white,
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: TextField(
+                  controller: _searchCtrl,
+                  decoration: InputDecoration(
+                    hintText: 'Search by name, house no, email or phone',
+                    hintStyle: const TextStyle(fontSize: 13, color: AppColors.textHint),
+                    prefixIcon: const Icon(Icons.search_rounded, color: AppColors.primary, size: 20),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear_rounded, size: 18, color: AppColors.textSecondary),
+                            onPressed: () { _searchCtrl.clear(); setState(() => _searchQuery = ''); },
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: AppColors.background,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: AppColors.border),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: AppColors.border),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                    ),
+                  ),
+                ),
+              ),
+
+              // ── Owner / Others toggle ────────────────────────────────
+              Container(
+                color: Colors.white,
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
+                    children: [
+                      _toggleTab('Owners', Icons.home_rounded, isSelected: _showOwners,
+                          onTap: () => setState(() => _showOwners = true)),
+                      _toggleTab('Others', Icons.people_rounded, isSelected: !_showOwners,
+                          onTap: () => setState(() => _showOwners = false)),
+                    ],
+                  ),
+                ),
+              ),
+
               const Divider(height: 1, color: AppColors.border),
 
               // ── Member list ─────────────────────────────────────────────
@@ -550,37 +680,87 @@ class _MembersScreenState extends State<MembersScreen> {
                       .where('month', isEqualTo: _monthKey())
                       .snapshots(),
                   builder: (_, invoiceSnap) {
-                    // Build uid → invoice status map for this month
+                    // Build house_no → invoice status map for this month
                     final Map<String, String> statusMap = {};
                     if (invoiceSnap.hasData) {
                       for (final doc in invoiceSnap.data!.docs) {
                         final d = doc.data() as Map<String, dynamic>;
-                        final uid = d['uid'] as String? ?? '';
-                        if (uid.isNotEmpty) statusMap[uid] = d['status'] as String? ?? 'UNPAID';
+                        final houseNo = d['house_no'] as String? ?? '';
+                        if (houseNo.isNotEmpty) statusMap[houseNo] = d['status'] as String? ?? 'UNPAID';
                       }
                     }
 
                     return StreamBuilder<QuerySnapshot>(
                       stream: FirebaseFirestore.instance
                           .collection('users')
-                          .where('role', isEqualTo: 'user')
-                          .orderBy('created_at', descending: true)
+                          .where('role', whereIn: ['user', 'resident'])
                           .snapshots(),
                       builder: (_, snap) {
                         if (snap.connectionState == ConnectionState.waiting) {
                           return const Center(child: CircularProgressIndicator());
                         }
-                        final docs = snap.data?.docs ?? [];
-                        if (docs.isEmpty) {
+
+                        // Filter: removed users, active toggle tab, and search query
+                        final allDocs = (snap.data?.docs ?? []).where((d) {
+                          final data = d.data() as Map<String, dynamic>;
+                          // Exclude removed
+                          if ((data['status']?.toString() ?? 'active') == 'removed') return false;
+                          // Apply toggle
+                          final link    = data['account_link'] as Map?;
+                          final isOwner = link == null || link['primary_owner_uid'] == null;
+                          if (_showOwners && !isOwner) return false;
+                          if (!_showOwners && isOwner) return false;
+                          // Apply search
+                          if (_searchQuery.isNotEmpty) {
+                            final name    = (data['name']    ?? '').toString().toLowerCase();
+                            final email   = (data['email']   ?? '').toString().toLowerCase();
+                            final phone   = (data['phone']   ?? '').toString().toLowerCase();
+                            final houseNo = (data['house_no'] ?? '').toString().toLowerCase();
+                            if (!name.contains(_searchQuery)    &&
+                                !email.contains(_searchQuery)   &&
+                                !phone.contains(_searchQuery)   &&
+                                !houseNo.contains(_searchQuery)) return false;
+                          }
+                          return true;
+                        }).toList()
+                          ..sort((a, b) {
+                            final da = a.data() as Map<String, dynamic>;
+                            final db = b.data() as Map<String, dynamic>;
+                            final hA = (da['house_no'] ?? '').toString();
+                            final hB = (db['house_no'] ?? '').toString();
+                            final cmp = hA.compareTo(hB);
+                            if (cmp != 0) return cmp;
+                            // Same house: owner before tenant
+                            final aIsOwner = (da['account_link'] as Map?)?['primary_owner_uid'] == null;
+                            final bIsOwner = (db['account_link'] as Map?)?['primary_owner_uid'] == null;
+                            if (aIsOwner && !bIsOwner) return -1;
+                            if (!aIsOwner && bIsOwner) return 1;
+                            return 0;
+                          });
+
+                        if (allDocs.isEmpty) {
+                          final isSearch = _searchQuery.isNotEmpty;
                           return Center(
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.people_outline_rounded, size: 64, color: AppColors.textHint),
+                                Icon(
+                                  isSearch ? Icons.search_off_rounded : Icons.people_outline_rounded,
+                                  size: 64, color: AppColors.textHint,
+                                ),
                                 const SizedBox(height: 12),
-                                const Text('No residents yet', style: TextStyle(fontSize: 16, color: AppColors.textSecondary)),
+                                Text(
+                                  isSearch ? 'No results for "$_searchQuery"'
+                                      : (_showOwners ? 'No owners yet' : 'No tenants / family members yet'),
+                                  style: const TextStyle(fontSize: 16, color: AppColors.textSecondary),
+                                ),
                                 const SizedBox(height: 6),
-                                const Text('Tap "Add Resident" to onboard your first member', style: TextStyle(fontSize: 13, color: AppColors.textHint)),
+                                Text(
+                                  isSearch ? 'Try a different name, house no. or email'
+                                      : (_showOwners ? 'Tap "Add Resident" to onboard your first member' : 'Owners can add family/tenants from their Members screen'),
+                                  style: const TextStyle(fontSize: 13, color: AppColors.textHint),
+                                  textAlign: TextAlign.center,
+                                ),
                               ],
                             ),
                           );
@@ -588,34 +768,53 @@ class _MembersScreenState extends State<MembersScreen> {
 
                         return ListView.separated(
                           padding: const EdgeInsets.all(16),
-                          itemCount: docs.length,
+                          itemCount: allDocs.length,
                           separatorBuilder: (_, __) => const SizedBox(height: 10),
                           itemBuilder: (_, i) {
-                            final doc  = docs[i];
+                            final doc  = allDocs[i];
                             final data = doc.data() as Map<String, dynamic>;
-                            final name    = data['name']?.toString() ?? '—';
-                            final email   = data['email']?.toString() ?? '—';
-                            final phone   = data['phone']?.toString() ?? '—';
-                            final houseNo = data['house_no']?.toString() ?? '—';
-                            final invStatus = statusMap[doc.id];
+                            final name      = data['name']?.toString() ?? '—';
+                            final email     = data['email']?.toString() ?? '—';
+                            final phone     = data['phone']?.toString() ?? '—';
+                            final houseNo   = data['house_no']?.toString() ?? '—';
+                            final vehicleNo = (data['vehicle_no'] ?? '').toString().trim();
+                            final invStatus = statusMap[houseNo];
+
+                            // Role badge
+                            final link    = data['account_link'] as Map?;
+                            final isOwner = link == null || link['primary_owner_uid'] == null;
+                            final linkedAs = link?['linked_as']?.toString() ?? 'tenant';
+                            final roleLabel = isOwner ? 'Owner'
+                                : '${linkedAs[0].toUpperCase()}${linkedAs.substring(1)}';
+                            final roleColor = isOwner
+                                ? const Color(0xFF059669)
+                                : const Color(0xFF7C3AED);
 
                             return Container(
                               decoration: AppTheme.cardDecoration,
                               padding: const EdgeInsets.all(14),
                               child: Row(
                                 children: [
-                                  // Avatar
+                                  // Avatar / house-no tile
                                   Container(
                                     width: 46,
                                     height: 46,
                                     decoration: BoxDecoration(
-                                      color: AppColors.primaryLight,
+                                      color: isOwner
+                                          ? AppColors.primaryLight
+                                          : const Color(0xFFEDE9FE),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Center(
                                       child: Text(
                                         houseNo,
-                                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.primary),
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: isOwner
+                                              ? AppColors.primary
+                                              : const Color(0xFF7C3AED),
+                                        ),
                                         textAlign: TextAlign.center,
                                       ),
                                     ),
@@ -627,7 +826,27 @@ class _MembersScreenState extends State<MembersScreen> {
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Text(name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                                        // Name + role badge on the same row
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(name,
+                                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: roleColor.withOpacity(0.1),
+                                                borderRadius: BorderRadius.circular(20),
+                                              ),
+                                              child: Text(
+                                                roleLabel,
+                                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: roleColor),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                         const SizedBox(height: 2),
                                         Text(email, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
                                         if (phone.isNotEmpty && phone != '—') ...[
@@ -635,7 +854,45 @@ class _MembersScreenState extends State<MembersScreen> {
                                           Text(phone, style: const TextStyle(fontSize: 12, color: AppColors.textHint)),
                                         ],
                                         const SizedBox(height: 6),
-                                        _statusChip(invStatus),
+                                        // Show payment status for owners; for tenants show "Shared flat"
+                                        isOwner
+                                            ? _statusChip(invStatus)
+                                            : Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFFF3F4F6),
+                                                  borderRadius: BorderRadius.circular(20),
+                                                ),
+                                                child: const Text('Shared flat',
+                                                    style: TextStyle(fontSize: 10, color: AppColors.textSecondary, fontWeight: FontWeight.w500)),
+                                              ),
+                                        // Vehicle number (if set)
+                                        if (vehicleNo.isNotEmpty) ...[
+                                          const SizedBox(height: 6),
+                                          Row(
+                                            children: [
+                                              const Icon(Icons.directions_car_rounded, size: 12, color: Color(0xFFF59E0B)),
+                                              const SizedBox(width: 4),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFFFEF3C7),
+                                                  borderRadius: BorderRadius.circular(5),
+                                                  border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.4)),
+                                                ),
+                                                child: Text(
+                                                  vehicleNo,
+                                                  style: const TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                    letterSpacing: 1.0,
+                                                    color: Color(0xFF92400E),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
                                       ],
                                     ),
                                   ),
@@ -643,7 +900,7 @@ class _MembersScreenState extends State<MembersScreen> {
                                   // Delete button
                                   IconButton(
                                     icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error, size: 22),
-                                    tooltip: 'Remove resident',
+                                    tooltip: 'Remove member',
                                     onPressed: _deleting ? null : () => _deleteResident(doc.id, name),
                                   ),
                                 ],

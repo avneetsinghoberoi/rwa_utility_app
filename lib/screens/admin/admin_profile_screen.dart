@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gate_basic/screens/login/login_screen.dart';
+import 'package:gate_basic/utils/admin_dashboard_key.dart';
 
 class AdminProfileScreen extends StatelessWidget {
   const AdminProfileScreen({super.key});
@@ -20,6 +21,22 @@ class AdminProfileScreen extends StatelessWidget {
         foregroundColor: const Color(0xFF0F172A),
         elevation: 0,
         surfaceTintColor: Colors.white,
+        leading: Navigator.canPop(context)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: () => Navigator.pop(context),
+              )
+            : IconButton(
+                icon: const Icon(Icons.menu_rounded),
+                onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer(),
+              ),
+        actions: [
+          if (Navigator.canPop(context))
+            IconButton(
+              icon: const Icon(Icons.menu_rounded),
+              onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer(),
+            ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(

@@ -6,6 +6,9 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { createObjectCsvStringifier } = require("csv-writer");
 
+// Import account sharing functions
+const accountSharing = require("./account_sharing");
+
 admin.initializeApp();
 setGlobalOptions({ region: "us-central1" });
 
@@ -1402,3 +1405,10 @@ exports.closeDemandDueHttp = onRequest({ cors: true }, async (req, res) => {
     res.status(500).json({ error: { status: "INTERNAL", message: "Internal error" } });
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ACCOUNT SHARING FUNCTIONS
+// ─────────────────────────────────────────────────────────────────────────────
+exports.onAddFlatMemberRequest = accountSharing.onAddFlatMemberRequest;
+exports.onRemoveFlatMemberRequest = accountSharing.onRemoveFlatMemberRequest;
+exports.runMigration = accountSharing.runMigration;

@@ -7,6 +7,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:gate_basic/theme/app_theme.dart';
+import '../../utils/dashboard_key.dart';
 import 'receipt_pdf_service.dart';
 
 class UserPayScreen extends StatefulWidget {
@@ -81,7 +82,7 @@ class _UserPayScreenState extends State<UserPayScreen> {
     setState(() => proofImage = File(x.path));
   }
 
-  /// ✅ IMPROVED: Better error handling for image uploads
+  /// ✅ IMPROVED: Better error handling for image uploads (works on mobile & web)
   Future<String?> _uploadProofIfAny(String paymentDocId) async {
     if (proofImage == null || user == null) return null;
 
@@ -93,10 +94,14 @@ class _UserPayScreenState extends State<UserPayScreen> {
           .child(user!.uid)
           .child('$paymentDocId.jpg');
 
+      // Read file as bytes (works on all platforms: mobile & web)
+      final fileBytes = await proofImage!.readAsBytes();
+
       // Upload with metadata and timeout
-      await ref.putFile(
-        proofImage!,
+      await ref.putData(
+        fileBytes,
         SettableMetadata(
+          contentType: 'image/jpeg',
           customMetadata: {
             'uploadedAt': DateTime.now().toString(),
             'uploadedBy': user!.uid,
@@ -159,10 +164,16 @@ class _UserPayScreenState extends State<UserPayScreen> {
       return;
     }
 
-    final houseNo = (userData['house_no'] ?? '').toString();
+    // Resolve house_no for payment submission.
+    // Priority: top-level → unit_info.flat_no (= owner's house_no for tenants) → unit_info.house_no
+    final _unitInfo = userData['unit_info'] as Map?;
+    final houseNo = (userData['house_no']
+            ?? _unitInfo?['flat_no']
+            ?? _unitInfo?['house_no']
+            ?? '').toString();
 
     try {
-      // ✅ UPLOAD PROOF FIRST (before creating payment)
+      // ✅ UPLOAD PROOF FIRST (before creating payment) - Works on mobile & web
       String? proofUrl;
       if (proofImage != null) {
         setState(() => uploadingProof = true);
@@ -173,9 +184,13 @@ class _UserPayScreenState extends State<UserPayScreen> {
               .child(user!.uid)
               .child('${DateTime.now().millisecondsSinceEpoch}.jpg');
 
-          await ref.putFile(
-            proofImage!,
+          // Read file as bytes (works on all platforms: mobile & web)
+          final fileBytes = await proofImage!.readAsBytes();
+
+          await ref.putData(
+            fileBytes,
             SettableMetadata(
+              contentType: 'image/jpeg',
               customMetadata: {
                 'uploadedAt': DateTime.now().toString(),
                 'uploadedBy': user!.uid,
@@ -207,7 +222,7 @@ class _UserPayScreenState extends State<UserPayScreen> {
           : (invoiceType == 'DEMAND' ? 'Special Due' : 'Monthly Maintenance');
 
       // ✅ CREATE PAYMENT WITH PROOF URL INCLUDED (single write)
-      await FirebaseFirestore.instance.collection('payments').add({
+      final paymentData = {
         'uid': user!.uid,
         'amount': amount,
         'utr': utr,
@@ -220,16 +235,37 @@ class _UserPayScreenState extends State<UserPayScreen> {
         'purpose': purpose,
         if (widget.invoiceId != null) 'invoice_id': widget.invoiceId,
         if (proofUrl != null) 'proof_url': proofUrl,  // ← INCLUDE HERE
-      });
+      };
+
+      debugPrint('🔵 [Payment] Submitting payment data: $paymentData');
+      await FirebaseFirestore.instance.collection('payments').add(paymentData);
+      debugPrint('🟢 [Payment] Payment created successfully!');
 
       setState(() => proofImage = null);
       txnCtrl.clear();
       noteCtrl.clear();
 
       _showSnack('Payment submitted ✅ Waiting for admin verification.');
+    } on FirebaseException catch (e) {
+      debugPrint('🔴 [Payment] Firestore error - Code: ${e.code}, Message: ${e.message}');
+      String errorMsg = 'Payment submission failed';
+      switch (e.code) {
+        case 'permission-denied':
+          errorMsg = 'You do not have permission to submit payments. Contact admin.';
+          break;
+        case 'invalid-argument':
+          errorMsg = 'Invalid payment data. Check all fields and try again.';
+          break;
+        case 'unauthenticated':
+          errorMsg = 'Your session expired. Please log in again.';
+          break;
+        default:
+          errorMsg = 'Error: ${e.code}. ${e.message}';
+      }
+      _showSnack(errorMsg, isError: true);
     } catch (e) {
+      debugPrint('🔴 [Payment] Unexpected error: $e');
       _showSnack('Failed: $e', isError: true);
-      debugPrint('Payment submission error: $e');
     }
   }
 
@@ -333,10 +369,81 @@ class _UserPayScreenState extends State<UserPayScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    // Guard: only the account owner can make payments.
+    // A user is an owner if account_link is absent OR primary_owner_uid is null.
+    final _accountLink = userData['account_link'] as Map?;
+    final _isOwner = _accountLink == null || _accountLink['primary_owner_uid'] == null;
+    if (!_isOwner) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          title: const Text('Pay Maintenance',
+              style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+          backgroundColor: Colors.white,
+          foregroundColor: AppColors.textPrimary,
+          elevation: 0,
+          leading: Navigator.canPop(context)
+              ? IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: () => Navigator.pop(context),
+                )
+              : IconButton(
+                  icon: const Icon(Icons.menu_rounded),
+                  onPressed: () => dashboardScaffoldKey.currentState?.openDrawer(),
+                ),
+          actions: [
+            if (Navigator.canPop(context))
+              IconButton(
+                icon: const Icon(Icons.menu_rounded),
+                onPressed: () => dashboardScaffoldKey.currentState?.openDrawer(),
+              ),
+          ],
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.lock_outline_rounded,
+                      size: 36, color: AppColors.error),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Payments are managed by the flat owner',
+                  style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Only the primary account holder can pay dues. Please contact the flat owner for payment.',
+                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     final name =
         (userData['name'] ?? userData['username'] ?? 'User').toString();
-    final flat =
-        (userData['house'] ?? userData['house_noNo'] ?? '').toString();
+    final _ui = userData['unit_info'] as Map?;
+    final flat = (userData['house_no']
+            ?? _ui?['flat_no']
+            ?? _ui?['house_no']
+            ?? '').toString();
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -352,6 +459,22 @@ class _UserPayScreenState extends State<UserPayScreen> {
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
         surfaceTintColor: Colors.white,
+        leading: Navigator.canPop(context)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: () => Navigator.pop(context),
+              )
+            : IconButton(
+                icon: const Icon(Icons.menu_rounded),
+                onPressed: () => dashboardScaffoldKey.currentState?.openDrawer(),
+              ),
+        actions: [
+          if (Navigator.canPop(context))
+            IconButton(
+              icon: const Icon(Icons.menu_rounded),
+              onPressed: () => dashboardScaffoldKey.currentState?.openDrawer(),
+            ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(

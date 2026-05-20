@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:gate_basic/config/app_config.dart';
 import 'package:gate_basic/theme/app_theme.dart';
+import 'package:gate_basic/utils/admin_dashboard_key.dart';
 
 import 'create_demand_due_screen.dart';
 
@@ -31,6 +32,15 @@ class AdminDuesScreen extends StatelessWidget {
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
         surfaceTintColor: Colors.white,
+        leading: Navigator.canPop(context)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: () => Navigator.pop(context),
+              )
+            : IconButton(
+                icon: const Icon(Icons.menu_rounded),
+                onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer(),
+              ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(
@@ -39,6 +49,11 @@ class AdminDuesScreen extends StatelessWidget {
           ),
         ),
         actions: [
+          if (Navigator.canPop(context))
+            IconButton(
+              icon: const Icon(Icons.menu_rounded),
+              onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer(),
+            ),
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: FilledButton.icon(

@@ -4,11 +4,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:gate_basic/theme/app_theme.dart';
 
+import '../../utils/dashboard_key.dart';
 import 'pay_screen.dart';
 import 'issues_screen.dart';
 import 'notices_screen.dart';
 import 'expense_screen.dart';
-import 'qrpass_screen.dart';
+import 'user_profile_screen.dart';
 import 'directory_screen.dart';
 
 class UserHomeScreen extends StatefulWidget {
@@ -20,14 +21,23 @@ class UserHomeScreen extends StatefulWidget {
 }
 
 class _UserHomeScreenState extends State<UserHomeScreen> {
-  // ── Quick-access items ──────────────────────────────────────────
-  late final List<_QuickItem> _quickItems = [
-    _QuickItem(
-      icon: Icons.payment_rounded,
-      label: 'Pay',
-      color: AppColors.primary,
-      screen: const UserPayScreen(),
-    ),
+  // ── Owner check ─────────────────────────────────────────────────
+  // A user is the account owner if they have no primary_owner_uid.
+  // Admin-created residents have no account_link at all → also owners.
+  bool get _isOwner {
+    final accountLink = widget.userData['account_link'] as Map?;
+    return accountLink == null || accountLink['primary_owner_uid'] == null;
+  }
+
+  // ── Quick-access items (Pay only shown to owners) ────────────────
+  List<_QuickItem> get _quickItems => [
+    if (_isOwner)
+      _QuickItem(
+        icon: Icons.payment_rounded,
+        label: 'Pay',
+        color: AppColors.primary,
+        screen: const UserPayScreen(),
+      ),
     _QuickItem(
       icon: Icons.report_problem_rounded,
       label: 'Issue',
@@ -47,10 +57,10 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
       screen: const DirectoryScreen(),
     ),
     _QuickItem(
-      icon: Icons.qr_code_rounded,
-      label: 'QR Pass',
+      icon: Icons.person_rounded,
+      label: 'Profile',
       color: AppColors.success,
-      screen: UserProfileScreen(),
+      screen: const UserProfileScreen(),
     ),
     _QuickItem(
       icon: Icons.receipt_long_rounded,
@@ -66,6 +76,15 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     final name = (widget.userData['name'] ?? 'Resident').toString();
     final houseNo = (widget.userData['house_no'] ?? '-').toString();
     final hour = DateTime.now().hour;
+
+    // Relationship label for tenants/family (null for primary owners)
+    final _accountLink = widget.userData['account_link'] as Map?;
+    final _linkedAs = _accountLink?['primary_owner_uid'] != null
+        ? (_accountLink?['linked_as']?.toString() ?? 'tenant')
+        : null;
+    final _roleLabel = _linkedAs != null
+        ? '${_linkedAs[0].toUpperCase()}${_linkedAs.substring(1)}'
+        : null;
     final greeting = hour < 12
         ? 'Good morning'
         : hour < 17
@@ -83,6 +102,10 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
             pinned: true,
             elevation: 0,
             backgroundColor: AppColors.primaryDark,
+            leading: IconButton(
+              icon: const Icon(Icons.menu_rounded, color: Colors.white),
+              onPressed: () => dashboardScaffoldKey.currentState?.openDrawer(),
+            ),
             flexibleSpace: FlexibleSpaceBar(
               collapseMode: CollapseMode.pin,
               background: Container(
@@ -138,6 +161,29 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                                     color: Colors.white.withOpacity(0.8),
                                     fontSize: 13),
                               ),
+                              if (_roleLabel != null) ...[
+                                Text(
+                                  '  ·  ',
+                                  style: TextStyle(
+                                      color: Colors.white.withOpacity(0.5),
+                                      fontSize: 13),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 7, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.18),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    _roleLabel,
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ],
@@ -159,11 +205,13 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── All pending dues ─────────────────────────
-                  AppTheme.sectionHeader('Your Dues', emoji: '💳'),
-                  const SizedBox(height: 12),
-                  _buildAllDuesSection(context),
-                  const SizedBox(height: 22),
+                  // ── All pending dues (owners only) ───────────
+                  if (_isOwner) ...[
+                    AppTheme.sectionHeader('Your Dues', emoji: '💳'),
+                    const SizedBox(height: 12),
+                    _buildAllDuesSection(context),
+                    const SizedBox(height: 22),
+                  ],
 
                   // ── Quick access ──────────────────────────────
                   AppTheme.sectionHeader('Quick Access'),
@@ -177,11 +225,13 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                   _buildLatestNotice(context),
                   const SizedBox(height: 22),
 
-                  // ── Recent payments ──────────────────────────
-                  AppTheme.sectionHeader('Recent Payments', emoji: '📈'),
-                  const SizedBox(height: 12),
-                  _buildRecentPayments(),
-                  const SizedBox(height: 20),
+                  // ── Recent payments (owners only) ────────────
+                  if (_isOwner) ...[
+                    AppTheme.sectionHeader('Recent Payments', emoji: '📈'),
+                    const SizedBox(height: 12),
+                    _buildRecentPayments(),
+                    const SizedBox(height: 20),
+                  ],
                 ],
               ),
             ),
@@ -196,15 +246,21 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) return const SizedBox.shrink();
 
-    final firestoreDocId =
-        (widget.userData['firestoreDocId'] as String?)?.isNotEmpty == true
-            ? widget.userData['firestoreDocId'] as String
-            : currentUser.uid;
+    // Resolve house number for invoice/payment queries.
+    // Priority:
+    //   1. Top-level house_no (admin-created residents, and new tenants after fix)
+    //   2. unit_info.flat_no  (existing tenants: flat_no = owner's house_no)
+    //   3. unit_info.house_no (fallback)
+    final unitInfo = widget.userData['unit_info'] as Map?;
+    final houseNo = (widget.userData['house_no']
+            ?? unitInfo?['flat_no']
+            ?? unitInfo?['house_no']
+            ?? '').toString();
 
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('invoices')
-          .where('uid', isEqualTo: firestoreDocId)
+          .where('house_no', isEqualTo: houseNo)
           .where('status', whereIn: ['UNPAID', 'PARTIAL', 'SUBMITTED'])
           .snapshots(),
       builder: (context, snap) {
@@ -560,11 +616,16 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
 
   // ── Recent Payments ──────────────────────────────────────────────
   Widget _buildRecentPayments() {
+    // Resolve house number with same fallback logic used for dues
+    final houseNo = (widget.userData['house_no']
+            ?? (widget.userData['unit_info'] as Map?)?['house_no']
+            ?? '').toString();
+
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('payments')
-          .where('house_no', isEqualTo: widget.userData['house_no'])
-          .orderBy('timestamp', descending: true)
+          .where('house_no', isEqualTo: houseNo)
+          .orderBy('created_at', descending: true)
           .limit(3)
           .snapshots(),
       builder: (context, snapshot) {
@@ -580,7 +641,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
               final index = entry.key;
               final doc = entry.value;
               final data = doc.data() as Map<String, dynamic>;
-              final ts = data['timestamp'];
+              final ts = data['created_at'];
               final date = ts is Timestamp ? ts.toDate() : DateTime.now();
 
               return Column(
@@ -606,7 +667,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Paid ₹${data['amount_paid'] ?? '-'}',
+                                'Paid ₹${data['amount'] ?? '-'}',
                                 style: const TextStyle(
                                     fontWeight: FontWeight.w600,
                                     fontSize: 14,

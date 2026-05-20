@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:gate_basic/theme/app_theme.dart';
+import '../../utils/dashboard_key.dart';
 
 class DirectoryScreen extends StatefulWidget {
   const DirectoryScreen({super.key});
@@ -30,10 +31,16 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
     super.dispose();
   }
 
-  /// Filter and sort members based on search and sort preferences
+  /// Filter and sort members based on search and sort preferences.
+  /// Also excludes removed users (client-side, so missing status = active).
   List<DocumentSnapshot> _filterMembers(List<DocumentSnapshot> docs) {
     var filtered = docs.where((doc) {
       final data = doc.data() as Map<String, dynamic>;
+
+      // Exclude removed users
+      final status = (data['status'] ?? 'active').toString();
+      if (status == 'removed') return false;
+
       final name = (data['name'] ?? '').toString().toLowerCase();
       final houseNo = (data['house_no'] ?? '').toString().toLowerCase();
       final phone = (data['phone'] ?? '').toString().toLowerCase();
@@ -43,7 +50,7 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
           phone.contains(_searchQuery);
     }).toList();
 
-    // Sort
+    // Sort — owners always before tenants within the same house
     if (_sortBy == 'name') {
       filtered.sort((a, b) {
         final nameA = (a.data() as Map<String, dynamic>)['name'] ?? '';
@@ -51,11 +58,20 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
         return nameA.toString().compareTo(nameB.toString());
       });
     } else {
-      // Sort by house number
+      // Sort by house_no, then owners before tenants
       filtered.sort((a, b) {
-        final noA = (a.data() as Map<String, dynamic>)['house_no'] ?? '';
-        final noB = (b.data() as Map<String, dynamic>)['house_no'] ?? '';
-        return noA.toString().compareTo(noB.toString());
+        final dataA = a.data() as Map<String, dynamic>;
+        final dataB = b.data() as Map<String, dynamic>;
+        final noA = (dataA['house_no'] ?? '').toString();
+        final noB = (dataB['house_no'] ?? '').toString();
+        final cmp = noA.compareTo(noB);
+        if (cmp != 0) return cmp;
+        // Same house: owner first (no primary_owner_uid)
+        final aIsOwner = (dataA['account_link'] as Map?)?['primary_owner_uid'] == null;
+        final bIsOwner = (dataB['account_link'] as Map?)?['primary_owner_uid'] == null;
+        if (aIsOwner && !bIsOwner) return -1;
+        if (!aIsOwner && bIsOwner) return 1;
+        return 0;
       });
     }
 
@@ -78,6 +94,15 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
             letterSpacing: -0.5,
           ),
         ),
+        leading: Navigator.canPop(context)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: () => Navigator.pop(context),
+              )
+            : IconButton(
+                icon: const Icon(Icons.menu_rounded),
+                onPressed: () => dashboardScaffoldKey.currentState?.openDrawer(),
+              ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(
@@ -86,6 +111,12 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
           ),
         ),
         actions: [
+          // Drawer menu when pushed
+          if (Navigator.canPop(context))
+            IconButton(
+              icon: const Icon(Icons.menu_rounded, color: AppColors.textPrimary),
+              onPressed: () => dashboardScaffoldKey.currentState?.openDrawer(),
+            ),
           // Sort menu
           PopupMenuButton<String>(
             onSelected: (value) {
@@ -163,7 +194,7 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('users')
-                  .where('role', isEqualTo: 'user')
+                  .where('role', whereIn: ['user', 'resident'])
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -305,12 +336,35 @@ class _MemberCard extends StatelessWidget {
 
   const _MemberCard({required this.member});
 
+  /// Returns (badgeLabel, badgeColor, badgeIcon) for the user type badge
+  (String, Color, IconData) _badgeInfo() {
+    final accountLink = member['account_link'] as Map?;
+    final primaryOwnerUid = accountLink?['primary_owner_uid'];
+    final linkedAs = (accountLink?['linked_as'] ?? 'owner').toString();
+
+    final isOwner = primaryOwnerUid == null;
+
+    if (isOwner) {
+      return ('Owner', const Color(0xFF059669), Icons.home_rounded);
+    }
+
+    // Capitalise first letter of linked_as
+    final label = linkedAs.isNotEmpty
+        ? '${linkedAs[0].toUpperCase()}${linkedAs.substring(1)}'
+        : 'Tenant';
+
+    return (label, const Color(0xFF7C3AED), Icons.person_rounded);
+  }
+
   @override
   Widget build(BuildContext context) {
     final name = member['name'] ?? 'Unknown';
     final houseNo = member['house_no'] ?? '-';
     final phone = member['phone'] ?? '-';
     final email = member['email'] ?? '-';
+    final vehicleNo = (member['vehicle_no'] ?? '').toString().trim();
+
+    final (badgeLabel, badgeColor, badgeIcon) = _badgeInfo();
 
     // Generate avatar color based on name hash
     final avatarColor = _getAvatarColor(name.toString());
@@ -392,28 +446,28 @@ class _MemberCard extends StatelessWidget {
                   ),
                 ),
 
-                // Badge indicator
+                // Dynamic badge: Owner / Tenant / Spouse / Family etc.
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: AppColors.successLight,
+                    color: badgeColor.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        Icons.check_circle,
+                        badgeIcon,
                         size: 12,
-                        color: AppColors.success,
+                        color: badgeColor,
                       ),
-                      SizedBox(width: 4),
+                      const SizedBox(width: 4),
                       Text(
-                        'Resident',
+                        badgeLabel,
                         style: TextStyle(
                           fontSize: 11,
-                          color: AppColors.success,
+                          color: badgeColor,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -469,6 +523,41 @@ class _MemberCard extends StatelessWidget {
                 ),
               ],
             ),
+
+            // ── Vehicle Number (if set) ──────────────────────
+            if (vehicleNo.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Divider(height: 1, color: AppColors.divider),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const Icon(Icons.directions_car_rounded, size: 14, color: Color(0xFFF59E0B)),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'Vehicle',
+                    style: TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(width: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF3C7),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.4)),
+                    ),
+                    child: Text(
+                      vehicleNo,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
+                        color: Color(0xFF92400E),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),

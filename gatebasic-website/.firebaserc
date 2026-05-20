@@ -1,0 +1,12 @@
+{
+  "projects": {
+    "default": "rms-app-3d585"
+  },
+  "targets": {
+    "rms-app-3d585": {
+      "hosting": {
+        "app": ["rms-app-3d585"]
+      }
+    }
+  }
+}

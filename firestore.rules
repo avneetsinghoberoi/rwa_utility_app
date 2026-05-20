@@ -2,99 +2,351 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ── Helpers ──────────────────────────────────────────────────────────────
+    // ============================================================================
+    // HELPER FUNCTIONS
+    // ============================================================================
 
-    function isSignedIn() {
-      return request.auth != null;
+    /// Check if user is admin
+    function isAdmin(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.role == 'admin';
     }
 
-    // Works when the Firestore document ID == Firebase Auth UID.
-    // New residents created via createResidentHttp always satisfy this.
-    function isAdmin() {
-      return isSignedIn()
-          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    /// Check if user is a resident.
+    /// BUG FIX: admin-created residents have role == 'user', not 'resident'.
+    /// We accept both so all residents can submit payments, create issues, etc.
+    function isResidentUser(userId) {
+      let role = get(/databases/$(database)/documents/users/$(userId)).data.role;
+      return role == 'resident' || role == 'user';
     }
 
-    // ── users ─────────────────────────────────────────────────────────────────
-    // Residents can read all user data (for directory feature) and update their own.
-    // Admins can read/write all.
+    /// Check if user is authenticated and not removed.
+    /// BUG FIX: admin-created residents have no 'status' field at all
+    /// (createResidentHttp never writes it). Treat missing status as 'active';
+    /// only explicitly 'removed' accounts are blocked.
+    function isActiveUser(userId) {
+      let s = get(/databases/$(database)/documents/users/$(userId)).data.get('status', 'active');
+      return request.auth.uid == userId && s != 'removed';
+    }
+
+    /// Get the house number for a user.
+    /// BUG FIX: admin-created residents store house_no at top level (no unit_info).
+    /// Account-sharing users store it inside unit_info.
+    /// We check top-level first, then fall back to unit_info.house_no.
+    function getUserHouseNo(userId) {
+      let userData = get(/databases/$(database)/documents/users/$(userId)).data;
+      let unitInfo = userData.get('unit_info', {});
+      let topLevel = userData.get('house_no', '');
+      return topLevel != '' ? topLevel : unitInfo.get('house_no', '');
+    }
+
+    /// Check if the authenticated user lives in the same house as a given document.
+    /// Documents (invoices, payments, receipts) store house_no directly.
+    function isSameHouseAsDoc(userId, docHouseNo) {
+      return getUserHouseNo(userId) == docHouseNo && docHouseNo != '';
+    }
+
+    /// Check if two users live in the same house (for directory access).
+    function isSameHouse(userId1, userId2) {
+      return getUserHouseNo(userId1) == getUserHouseNo(userId2) &&
+             getUserHouseNo(userId1) != '';
+    }
+
+    // ============================================================================
+    // USERS COLLECTION
+    // ============================================================================
+
     match /users/{userId} {
-      allow read:   if isSignedIn(); // All authenticated users can view directory
-      allow create: if isAdmin();
-      allow update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow delete: if isAdmin();
+      // Own profile is always readable
+      allow read: if request.auth.uid == userId;
+
+      // Any authenticated user can read any non-removed resident's profile.
+      // Required for: Members Directory (query by role), QR pass, etc.
+      allow read: if request.auth.uid != null &&
+                     resource.data.get('status', 'active') != 'removed';
+
+      // Admin can read all users
+      allow read: if request.auth.uid != null &&
+                     isAdmin(request.auth.uid);
+
+      // Flat members can read each other.
+      // BUG FIX: isSameHouse compared house_no fields which differ between
+      // admin-created residents (top-level house_no) and account-sharing users
+      // (unit_info.house_no = building name). They never matched.
+      // Instead, use the flat_members array — if the target userId is already
+      // listed in the requesting user's flat_members, they share the same flat
+      // and can read each other's profiles (needed for Members screen & directory).
+      allow read: if request.auth.uid != null &&
+                     userId in get(/databases/$(database)/documents/users/$(request.auth.uid))
+                                 .data.get('flat_members', []);
+
+      // Resident can update their own profile — but not security-critical fields
+      allow update: if request.auth.uid == userId &&
+                       isActiveUser(userId) &&
+                       !request.resource.data.diff(resource.data).affectedKeys()
+                         .hasAny(['role', 'account_link', 'flat_members',
+                                  'flat_no', 'wing', 'house_no', 'status']);
+
+      // Bootstrap rule: allow users to write missing fields (flat_members, status,
+      // house_no) on their own profile. These fields are absent for accounts created
+      // before the Cloud Function fix and are backfilled by the dashboard on first
+      // login. Only these specific fields (and updated_at) may be changed.
+      allow update: if request.auth.uid == userId &&
+                       request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['flat_members', 'status', 'house_no', 'updated_at']);
+
+      // Admin can update any user
+      allow update: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
+      // Account owner can remove a flat member:
+      //   - mark the removed user's status as 'removed'
+      //   - strip the removed UID from every flat member's flat_members array
+      // The target userId must currently be in the owner's flat_members list,
+      // and only the fields 'status' and 'flat_members' may be changed.
+      // isAccountOwner = primary_owner_uid is null (they ARE the primary account).
+      allow update: if request.auth.uid != null &&
+                       get(/databases/$(database)/documents/users/$(request.auth.uid))
+                           .data.get('account_link', {}).get('primary_owner_uid', null) == null &&
+                       userId in get(/databases/$(database)/documents/users/$(request.auth.uid))
+                                   .data.get('flat_members', []) &&
+                       request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['status', 'flat_members']);
+
+      // No direct deletes — handled via Cloud Functions (Admin SDK bypasses rules)
+      allow delete: if false;
+
+      // BUG FIX: original rule allowed self-creation with role == 'admin'.
+      // New residents should only be created by admins via Cloud Functions.
+      // We keep this rule only for the very first admin bootstrap if needed,
+      // but restrict it to role == 'user' or 'resident' only.
+      allow create: if request.auth.uid == userId &&
+                       request.resource.data.role in ['user', 'resident'];
     }
 
-    // ── invoices ──────────────────────────────────────────────────────────────
-    // Residents can read their own invoices; admins can read all.
-    // Writes only via Cloud Functions (Admin SDK bypasses rules).
+    // ============================================================================
+    // INVOICES COLLECTION
+    // ============================================================================
+
     match /invoices/{invoiceId} {
-      allow read: if isSignedIn()
-          && (resource.data.uid == request.auth.uid || isAdmin());
-      allow write: if false; // Cloud Functions only
+      // Admin can read all invoices
+      allow read: if request.auth.uid != null &&
+                     isAdmin(request.auth.uid);
+
+      // BUG FIX: old rule called isSameFlatMember(auth.uid, invoice.uid) which read
+      // unit_info from BOTH users — admin-created residents have no unit_info, so
+      // it always errored and denied access.
+      // New rule: compare auth user's house_no directly against the invoice's house_no.
+      allow read: if request.auth.uid != null &&
+                     isSameHouseAsDoc(request.auth.uid, resource.data.house_no);
+
+      // Invoices are created only by Cloud Functions (Admin SDK) — no client create needed.
+      // Keeping a minimal rule so the collection is not accidentally writable by clients.
+      allow create: if false;
+
+      // Only admin can update invoices (status, paid_amount etc.)
+      allow update: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
+      allow delete: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
     }
 
-    // ── demand_dues ───────────────────────────────────────────────────────────
-    // Admins read; Cloud Functions write.
-    // Residents don't need to read this collection directly — their invoices
-    // already have all the fields (title, description, due_date, etc.).
-    match /demand_dues/{dueId} {
-      allow read:  if isSignedIn(); // any authenticated user (admin UI shows it, residents don't see it)
-      allow write: if false; // Cloud Functions only
-    }
+    // ============================================================================
+    // PAYMENTS COLLECTION
+    // ============================================================================
 
-    // ── payments ──────────────────────────────────────────────────────────────
-    // Residents can create and read their own; admins can read all.
-    // Updates (verify/reject) only via Cloud Functions.
     match /payments/{paymentId} {
-      allow read:   if isSignedIn()
-          && (resource.data.uid == request.auth.uid || isAdmin());
-      allow create: if isSignedIn()
-          && request.resource.data.uid == request.auth.uid;
-      allow update: if false; // Cloud Functions only
+      // Admin can read all payments
+      allow read: if request.auth.uid != null &&
+                     isAdmin(request.auth.uid);
+
+      // BUG FIX: same isSameFlatMember issue as invoices.
+      // Also allow users to read their own payments by uid.
+      allow read: if request.auth.uid != null &&
+                     (resource.data.uid == request.auth.uid ||
+                      isSameHouseAsDoc(request.auth.uid, resource.data.house_no));
+
+      // BUG FIX 1: isResident() checked role == 'resident' only — missing role == 'user'.
+      // BUG FIX 2: status was checked as 'pending' — app actually stores 'SUBMITTED'.
+      // BUG FIX 3: payment_date was required — app doesn't store payment_date, uses created_at.
+      // BUG FIX 4: isSameFlatMember failed for admin-created residents.
+      allow create: if request.auth.uid != null &&
+                       isActiveUser(request.auth.uid) &&
+                       isResidentUser(request.auth.uid) &&
+                       request.resource.data.uid == request.auth.uid &&
+                       request.resource.data.status == 'SUBMITTED' &&
+                       request.resource.data.amount > 0;
+
+      // Only admin can verify/reject payments
+      allow update: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
       allow delete: if false;
     }
 
-    // ── receipts ──────────────────────────────────────────────────────────────
+    // ============================================================================
+    // RECEIPTS COLLECTION
+    // ============================================================================
+
     match /receipts/{receiptId} {
-      allow read:  if isSignedIn()
-          && (resource.data.uid == request.auth.uid || isAdmin());
-      allow write: if false; // Cloud Functions only
+      // Admin can read all receipts
+      allow read: if request.auth.uid != null &&
+                     isAdmin(request.auth.uid);
+
+      // BUG FIX: same isSameFlatMember issue. Also allow direct uid match.
+      allow read: if request.auth.uid != null &&
+                     (resource.data.uid == request.auth.uid ||
+                      isSameHouseAsDoc(request.auth.uid, resource.data.house_no));
+
+      // Receipts are created exclusively by Cloud Functions (Admin SDK bypasses rules).
+      // No client-side create needed.
+      allow create: if false;
+
+      allow update: if false;
+      allow delete: if false;
     }
 
-    // ── notices ───────────────────────────────────────────────────────────────
-    // All residents can read; only admin can create/edit/delete.
-    match /notices/{noticeId} {
-      allow read:  if isSignedIn();
-      allow write: if isAdmin();
-    }
+    // ============================================================================
+    // ISSUES COLLECTION
+    // ============================================================================
 
-    // ── expenses ──────────────────────────────────────────────────────────────
-    // All residents can read expenses (for breakdown view); only admins can write
-    match /expenses/{expenseId} {
-      allow read:  if isSignedIn();
-      allow write: if isAdmin();
-    }
-
-    // ── issues ────────────────────────────────────────────────────────────────
-    // Residents can create and read their own; admins can read/update all.
     match /issues/{issueId} {
-      allow read:   if isSignedIn()
-          && (resource.data.uid == request.auth.uid || isAdmin());
-      allow create: if isSignedIn();
-      allow update: if isAdmin();
-      allow delete: if false;
+      // Admin can read all issues
+      allow read: if request.auth.uid != null &&
+                     isAdmin(request.auth.uid);
+
+      // Own issue — always visible
+      allow read: if request.auth.uid == resource.data.uid;
+
+      // BUG FIX: isSameFlatMember failed for admin-created residents.
+      // Issues store uid (the reporter's UID); use house_no comparison instead.
+      allow read: if request.auth.uid != null &&
+                     isSameHouseAsDoc(request.auth.uid, resource.data.get('house_no', ''));
+
+      // BUG FIX: isResident() rejected role == 'user' residents.
+      allow create: if request.auth.uid != null &&
+                       isActiveUser(request.auth.uid) &&
+                       isResidentUser(request.auth.uid) &&
+                       request.resource.data.uid == request.auth.uid;
+
+      // Only admin can update issue status / add feedback
+      allow update: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
+      allow delete: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
     }
 
-    // ── complaints ─────────────────────────────────────────────────────────────
-    // Residents can create and read their own; admins can read/update all.
-    match /complaints/{complaintId} {
-      allow read:   if isSignedIn()
-          && (resource.data.uid == request.auth.uid || isAdmin());
-      allow create: if isSignedIn();
-      allow update: if isAdmin();
-      allow delete: if false;
+    // ============================================================================
+    // NOTICES COLLECTION
+    // ============================================================================
+
+    match /notices/{noticeId} {
+      // All authenticated users can read notices
+      allow read: if request.auth.uid != null;
+
+      // Only admin can create/update/delete notices
+      allow create: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
+      allow update: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
+      allow delete: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
     }
+
+    // ============================================================================
+    // EXPENSES COLLECTION
+    // ============================================================================
+
+    match /expenses/{expenseId} {
+      // BUG FIX: original rule was admin-only read, but there is an ExpenseScreen
+      // for residents in the app that queries this collection.
+      // Residents can read expenses (transparency); only admin can write.
+      allow read: if request.auth.uid != null;
+
+      allow create: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
+      allow update: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
+      allow delete: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+    }
+
+    // ============================================================================
+    // COMPLAINTS COLLECTION
+    // ============================================================================
+
+    match /complaints/{complaintId} {
+      // Admin can read all complaints
+      allow read: if request.auth.uid != null &&
+                     isAdmin(request.auth.uid);
+
+      // Own complaint is always readable
+      allow read: if request.auth.uid == resource.data.uid;
+
+      // BUG FIX: isSameFlatMember failed for admin-created residents.
+      allow read: if request.auth.uid != null &&
+                     isSameHouseAsDoc(request.auth.uid, resource.data.get('house_no', ''));
+
+      // BUG FIX: isResident() rejected role == 'user' residents.
+      allow create: if request.auth.uid != null &&
+                       isActiveUser(request.auth.uid) &&
+                       isResidentUser(request.auth.uid) &&
+                       request.resource.data.uid == request.auth.uid;
+
+      allow update: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
+      allow delete: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+    }
+
+    // ============================================================================
+    // DEMAND_DUES COLLECTION
+    // ============================================================================
+
+    match /demand_dues/{dueId} {
+      // All authenticated users can read demand dues
+      allow read: if request.auth.uid != null;
+
+      allow create: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
+      allow update: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
+      allow delete: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+    }
+
+    // ============================================================================
+    // REQUESTS COLLECTION — Account sharing (add/remove flat members)
+    // ============================================================================
+
+    match /_requests/{requestId} {
+      // BUG FIX: original required isResident() which rejects role == 'user'.
+      // Any authenticated active user can create a request.
+      allow create: if request.auth.uid != null &&
+                       isActiveUser(request.auth.uid);
+
+      // Requester can read their own request
+      allow read: if request.auth.uid == resource.data.requester_uid;
+
+      // Admin can read all requests
+      allow read: if request.auth.uid != null &&
+                     isAdmin(request.auth.uid);
+
+      // Cloud Functions update requests (Admin SDK bypasses rules — no rule needed).
+      // Explicitly deny client-side updates for security.
+      allow update: if false;
+
+      allow delete: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+    }
+
   }
 }

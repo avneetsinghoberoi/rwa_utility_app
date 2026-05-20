@@ -1,0 +1,304 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ============================================================================
+    // HELPER FUNCTIONS
+    // ============================================================================
+
+    /// Check if user is admin
+    function isAdmin(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.role == 'admin';
+    }
+
+    /// Check if user is resident
+    function isResident(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.role == 'resident';
+    }
+
+    /// Get user's unit info
+    function getUserUnitInfo(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.unit_info;
+    }
+
+    /// Get user's flat members list
+    function getUserFlatMembers(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.flat_members;
+    }
+
+    /// Check if user is account owner (primary owner, not linked)
+    function isAccountOwner(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.account_link.primary_owner_uid == null;
+    }
+
+    /// Get primary owner UID for a user
+    function getPrimaryOwnerUid(userId) {
+      let user = get(/databases/$(database)/documents/users/$(userId)).data;
+      return user.account_link.primary_owner_uid != null
+        ? user.account_link.primary_owner_uid
+        : userId;
+    }
+
+    /// Check if two users are on the same flat
+    function isSameFlatMember(userId1, userId2) {
+      let user1Unit = getUserUnitInfo(userId1);
+      let user2Unit = getUserUnitInfo(userId2);
+      return user1Unit.flat_no == user2Unit.flat_no &&
+             user1Unit.wing == user2Unit.wing;
+    }
+
+    /// Check if user is in flat members list
+    function isInFlatMembers(userId, flatMembersArray) {
+      return userId in flatMembersArray;
+    }
+
+    /// Check if user is authenticated and not removed
+    function isActiveUser(userId) {
+      return request.auth.uid == userId &&
+             get(/databases/$(database)/documents/users/$(userId)).data.status == 'active';
+    }
+
+    // ============================================================================
+    // USERS COLLECTION
+    // ============================================================================
+
+    match /users/{userId} {
+      // ✅ Authenticated users can read users (needed for queries by email, etc.)
+      allow read: if request.auth.uid != null;
+
+      // ✅ Admin can see all users
+      allow read: if request.auth.uid != null &&
+                     isAdmin(request.auth.uid);
+
+      // ✅ Can update own profile (but not critical fields)
+      allow update: if request.auth.uid == userId &&
+                       isActiveUser(userId) &&
+                       // Cannot change role or account_link
+                       !request.resource.data.diff(resource.data).affectedKeys()
+                         .hasAny(['role', 'account_link', 'flat_members', 'flat_no', 'wing', 'house_no']);
+
+      // ✅ Admin can update any user (except they manage via functions)
+      allow update: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
+      // ❌ No direct deletes (handled via Cloud Functions)
+      allow delete: if false;
+
+      // ✅ Registration (signup) creates new user
+      allow create: if request.auth.uid == userId &&
+                       request.resource.data.role in ['admin', 'resident'];
+    }
+
+    // ============================================================================
+    // INVOICES COLLECTION - Shared by flat members
+    // ============================================================================
+
+    match /invoices/{invoiceId} {
+      // ✅ Admin can read all invoices
+      allow read: if request.auth.uid != null &&
+                     isAdmin(request.auth.uid);
+
+      // ✅ Flat members can read their flat's invoices
+      allow read: if request.auth.uid != null &&
+                     isSameFlatMember(request.auth.uid, resource.data.uid);
+
+      // ✅ Any flat member can create payment for their flat's invoice
+      // (This represents the invoice itself, not payment submission)
+      allow create: if request.auth.uid != null &&
+                       isActiveUser(request.auth.uid) &&
+                       isResident(request.auth.uid) &&
+                       isSameFlatMember(request.auth.uid, request.resource.data.uid);
+
+      // ✅ Only admin can update invoices
+      allow update: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
+      allow delete: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+    }
+
+    // ============================================================================
+    // PAYMENTS COLLECTION - Shared by flat members
+    // ============================================================================
+
+    match /payments/{paymentId} {
+      // ✅ Admin can read all payments
+      allow read: if request.auth.uid != null &&
+                     isAdmin(request.auth.uid);
+
+      // ✅ Flat members can read their flat's payments
+      allow read: if request.auth.uid != null &&
+                     isSameFlatMember(request.auth.uid, resource.data.uid);
+
+      // ✅ Any resident can submit a payment for their flat
+      allow create: if request.auth.uid != null &&
+                       isActiveUser(request.auth.uid) &&
+                       isResident(request.auth.uid) &&
+                       isSameFlatMember(request.auth.uid, request.resource.data.uid) &&
+                       request.resource.data.status == 'pending' &&
+                       request.resource.data.payment_date != null;
+
+      // ✅ Only admin can verify/reject payments
+      allow update: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
+      allow delete: if false;
+    }
+
+    // ============================================================================
+    // RECEIPTS COLLECTION - Shared by flat members
+    // ============================================================================
+
+    match /receipts/{receiptId} {
+      // ✅ Admin can read all receipts
+      allow read: if request.auth.uid != null &&
+                     isAdmin(request.auth.uid);
+
+      // ✅ Flat members can read their flat's receipts
+      allow read: if request.auth.uid != null &&
+                     isSameFlatMember(request.auth.uid, resource.data.uid);
+
+      // ✅ Only admin creates receipts (via Cloud Function)
+      allow create: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ============================================================================
+    // ISSUES COLLECTION - Shared by flat members
+    // ============================================================================
+
+    match /issues/{issueId} {
+      // ✅ Admin can read all issues
+      allow read: if request.auth.uid != null &&
+                     isAdmin(request.auth.uid);
+
+      // ✅ Own issue - always visible
+      allow read: if request.auth.uid == resource.data.uid;
+
+      // ✅ Flat members can read issues from same flat
+      allow read: if request.auth.uid != null &&
+                     isSameFlatMember(request.auth.uid, resource.data.uid);
+
+      // ✅ Resident/tenant can report issues
+      allow create: if request.auth.uid != null &&
+                       isActiveUser(request.auth.uid) &&
+                       isResident(request.auth.uid) &&
+                       request.resource.data.uid == request.auth.uid;
+
+      // ✅ Only admin can update issues
+      allow update: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
+      allow delete: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+    }
+
+    // ============================================================================
+    // NOTICES COLLECTION - Public to all
+    // ============================================================================
+
+    match /notices/{noticeId} {
+      // ✅ All authenticated users can read notices
+      allow read: if request.auth.uid != null;
+
+      // ✅ Only admin can create notices
+      allow create: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
+      allow update: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
+      allow delete: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+    }
+
+    // ============================================================================
+    // EXPENSES COLLECTION - Admin only
+    // ============================================================================
+
+    match /expenses/{expenseId} {
+      // ✅ Admin can read/write
+      allow read: if request.auth.uid != null &&
+                     isAdmin(request.auth.uid);
+
+      allow create: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
+      allow update: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
+      allow delete: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+    }
+
+    // ============================================================================
+    // COMPLAINTS COLLECTION - Shared by flat members
+    // ============================================================================
+
+    match /complaints/{complaintId} {
+      // ✅ Admin can read all
+      allow read: if request.auth.uid != null &&
+                     isAdmin(request.auth.uid);
+
+      // ✅ Own complaint
+      allow read: if request.auth.uid == resource.data.uid;
+
+      // ✅ Flat members can read flat complaints
+      allow read: if request.auth.uid != null &&
+                     isSameFlatMember(request.auth.uid, resource.data.uid);
+
+      // ✅ Create complaint
+      allow create: if request.auth.uid != null &&
+                       isActiveUser(request.auth.uid) &&
+                       isResident(request.auth.uid);
+
+      // ✅ Admin can update
+      allow update: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
+      allow delete: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+    }
+
+    // ============================================================================
+    // DEMAND_DUES COLLECTION - Admin only
+    // ============================================================================
+
+    match /demand_dues/{dueId} {
+      allow read: if request.auth.uid != null;
+
+      allow create: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
+      allow update: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
+      allow delete: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+    }
+
+    // ============================================================================
+    // REQUESTS COLLECTION - For Cloud Functions
+    // ============================================================================
+
+    match /_requests/{requestId} {
+      // ✅ Residents can create requests
+      allow create: if request.auth.uid != null &&
+                       isResident(request.auth.uid);
+
+      // ✅ Own request visible
+      allow read: if request.auth.uid == resource.data.requester_uid;
+
+      // ✅ Admin can read all
+      allow read: if request.auth.uid != null &&
+                     isAdmin(request.auth.uid);
+
+      allow delete: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+    }
+
+  }
+}

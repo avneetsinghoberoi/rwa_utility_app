@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:gate_basic/screens/login/login_screen.dart';
+import 'package:gate_basic/utils/admin_dashboard_key.dart';
 
 class AdminExpenseScreen extends StatefulWidget {
   const AdminExpenseScreen({super.key});
@@ -55,6 +56,15 @@ class _AdminExpenseScreenState extends State<AdminExpenseScreen> {
         foregroundColor: const Color(0xFF0F172A),
         elevation: 0,
         surfaceTintColor: Colors.white,
+        leading: Navigator.canPop(context)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: () => Navigator.pop(context),
+              )
+            : IconButton(
+                icon: const Icon(Icons.menu_rounded),
+                onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer(),
+              ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(
@@ -63,16 +73,11 @@ class _AdminExpenseScreenState extends State<AdminExpenseScreen> {
           ),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () {
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
-                    (route) => false,
-              );
-            },
-          ),
+          if (Navigator.canPop(context))
+            IconButton(
+              icon: const Icon(Icons.menu_rounded),
+              onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer(),
+            ),
         ],
       ),
 

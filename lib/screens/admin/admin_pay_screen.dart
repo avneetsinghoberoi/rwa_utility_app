@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:gate_basic/config/app_config.dart';
 import 'package:gate_basic/theme/app_theme.dart';
+import 'package:gate_basic/utils/admin_dashboard_key.dart';
 
 class AdminPayScreen extends StatefulWidget {
   const AdminPayScreen({super.key});
@@ -304,6 +305,15 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
         surfaceTintColor: Colors.white,
+        leading: Navigator.canPop(context)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: () => Navigator.pop(context),
+              )
+            : IconButton(
+                icon: const Icon(Icons.menu_rounded),
+                onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer(),
+              ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(
@@ -312,6 +322,11 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
           ),
         ),
         actions: [
+          if (Navigator.canPop(context))
+            IconButton(
+              icon: const Icon(Icons.menu_rounded),
+              onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer(),
+            ),
           // Manual "Generate dues" button
           _generatingDues
               ? const Padding(

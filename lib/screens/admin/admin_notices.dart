@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:gate_basic/config/app_config.dart';
 import 'package:gate_basic/screens/login/login_screen.dart';
+import 'package:gate_basic/utils/admin_dashboard_key.dart';
 
 class AdminNoticesScreen extends StatefulWidget {
   const AdminNoticesScreen({super.key});
@@ -41,6 +42,15 @@ class _AdminNoticesScreenState extends State<AdminNoticesScreen> {
         foregroundColor: const Color(0xFF0F172A),
         elevation: 0,
         surfaceTintColor: Colors.white,
+        leading: Navigator.canPop(context)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: () => Navigator.pop(context),
+              )
+            : IconButton(
+                icon: const Icon(Icons.menu_rounded),
+                onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer(),
+              ),
         title: const Text("Community Notices",
             style: TextStyle(
               fontSize: 22,
@@ -56,16 +66,11 @@ class _AdminNoticesScreenState extends State<AdminNoticesScreen> {
           ),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout_rounded),
-            onPressed: () {
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
-                    (route) => false,
-              );
-            },
-          ),
+          if (Navigator.canPop(context))
+            IconButton(
+              icon: const Icon(Icons.menu_rounded),
+              onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer(),
+            ),
         ],
       ),
       body: SafeArea(

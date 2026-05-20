@@ -1,0 +1,1392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GateBasic — Smart Living, Simplified</title>
+  <meta name="description" content="GateBasic is an AI-powered community management platform. Smart payments, digital complaints, automated notices — all in one place."/>
+  <link rel="icon" href="logo.png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue:        #1A2844;   /* navy primary */
+      --blue-hover:  #142035;   /* navy hover */
+      --blue-light:  #F4F0E8;   /* warm cream */
+      --blue-mid:    #E2D5B0;   /* gold-tinted border */
+      --gold:        #C9A853;   /* brand gold */
+      --gold-hover:  #B8913D;
+      --gold-light:  #FBF6E9;
+      --gold-mid:    #EDD99A;
+      --navy:        #1A2844;
+      --navy-deep:   #0F1A2E;
+      --dark:        #0F1A2E;
+      --body:        #374151;
+      --muted:       #6B7280;
+      --faint:       #9CA3AF;
+      --border:      #E5E7EB;
+      --bg:          #F9FAFB;
+      --white:       #FFFFFF;
+      --success:     #16A34A;
+      --warning:     #D97706;
+      --error:       #DC2626;
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', sans-serif;
+      color: var(--body);
+      background: var(--white);
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.6;
+    }
+    a { text-decoration: none; color: inherit; }
+
+    /* ── UTILITIES ─────────────────────────────────────── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+    .tag {
+      display: inline-block;
+      font-size: 12px; font-weight: 600; letter-spacing: 0.8px;
+      text-transform: uppercase; color: var(--navy);
+      background: var(--gold-light); border: 1px solid var(--gold-mid);
+      padding: 5px 12px; border-radius: 100px;
+      margin-bottom: 20px;
+    }
+    .section-title {
+      font-size: clamp(30px, 4vw, 44px);
+      font-weight: 800; letter-spacing: -1.2px;
+      color: var(--dark); line-height: 1.1;
+      margin-bottom: 16px;
+    }
+    .section-sub {
+      font-size: 17px; color: var(--muted);
+      line-height: 1.75; max-width: 520px;
+    }
+    .center { text-align: center; }
+    .center .section-sub { margin: 0 auto; }
+
+    /* ── BUTTONS ───────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-family: 'Inter', sans-serif;
+      font-size: 15px; font-weight: 600;
+      padding: 12px 24px; border-radius: 10px;
+      cursor: pointer; transition: all 0.18s;
+      border: none;
+    }
+    .btn-blue {
+      background: var(--navy); color: var(--white);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.12), 0 4px 16px rgba(26,40,68,0.3);
+    }
+    .btn-blue:hover { background: var(--navy-deep); transform: translateY(-1px); box-shadow: 0 4px 20px rgba(26,40,68,0.4); }
+    .btn-outline {
+      background: var(--white); color: var(--navy);
+      border: 1.5px solid var(--navy);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .btn-outline:hover { background: var(--gold); color: var(--navy); border-color: var(--gold); transform: translateY(-1px); }
+
+    /* ── NAV ───────────────────────────────────────────── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 999;
+      background: rgba(255,255,255,0.9);
+      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      height: 64px; gap: 32px;
+    }
+    .nav-logo { display: flex; align-items: center; gap: 10px; }
+    .nav-logo img { width: 34px; height: 34px; object-fit: contain; border-radius: 8px; }
+    .nav-logo-text { font-size: 19px; font-weight: 800; color: var(--dark); letter-spacing: -0.5px; }
+    .nav-logo-text span { color: var(--gold); }
+    .nav-links {
+      display: flex; align-items: center; gap: 28px;
+      list-style: none; flex: 1; justify-content: center;
+    }
+    .nav-links a { font-size: 14px; font-weight: 500; color: var(--muted); transition: color 0.15s; }
+    .nav-links a:hover { color: var(--dark); }
+    .nav-right { display: flex; align-items: center; gap: 10px; }
+    .nav-signin {
+      font-size: 14px; font-weight: 600; color: var(--muted);
+      padding: 8px 16px; border-radius: 8px;
+      transition: color 0.15s;
+    }
+    .nav-signin:hover { color: var(--dark); }
+    .nav-cta {
+      font-size: 14px; font-weight: 600; color: var(--navy);
+      background: var(--gold); padding: 8px 18px;
+      border-radius: 8px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.08), 0 2px 8px rgba(201,168,83,0.3);
+      transition: all 0.15s;
+    }
+    .nav-cta:hover { background: var(--gold-hover); transform: translateY(-1px); }
+    .hamburger { display: none; cursor: pointer; flex-direction: column; gap: 5px; padding: 4px; }
+    .hamburger span { display: block; width: 22px; height: 2px; background: var(--dark); border-radius: 2px; transition: 0.2s; }
+
+    /* ── HERO ──────────────────────────────────────────── */
+    .hero {
+      padding: 130px 0 80px;
+      position: relative; overflow: hidden;
+      background: white;
+    }
+    /* Glow orbs */
+    .hero::before {
+      content: '';
+      position: absolute; top: -160px; right: -120px;
+      width: 780px; height: 780px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(201,168,83,0.12) 0%, rgba(26,40,68,0.06) 40%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero::after {
+      content: '';
+      position: absolute; bottom: -80px; left: -80px;
+      width: 500px; height: 500px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(26,40,68,0.05) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-grid {
+      display: grid; grid-template-columns: 45fr 55fr;
+      gap: 56px; align-items: center; position: relative;
+    }
+    .hero-left {}
+    .hero-eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 600; letter-spacing: 0.8px;
+      text-transform: uppercase; color: var(--navy);
+      background: var(--gold-light); border: 1px solid var(--gold-mid);
+      padding: 6px 14px; border-radius: 100px;
+      margin-bottom: 24px;
+    }
+    .hero-eyebrow-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--gold); animation: blink 2s infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    .hero h1 {
+      font-size: clamp(36px, 4.5vw, 56px);
+      font-weight: 900; letter-spacing: -2px;
+      line-height: 1.05; color: var(--dark);
+      margin-bottom: 20px;
+    }
+    .hero h1 em {
+      font-style: normal;
+      background: linear-gradient(135deg, #C9A853 0%, #E8C87A 60%, #A8842F 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero-desc {
+      font-size: 17px; color: var(--muted);
+      line-height: 1.75; margin-bottom: 36px;
+      max-width: 400px;
+    }
+    .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+    .hero-note {
+      margin-top: 20px; font-size: 13px; color: var(--faint);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .hero-note svg { width: 14px; height: 14px; }
+
+    /* ── HERO VISUAL — Browser Frame ───────────────────── */
+    .hero-right { position: relative; z-index: 1; padding: 24px 24px 36px 24px; }
+
+    /* Floating notification pills */
+    .fnotif {
+      position: absolute; z-index: 10;
+      background: white;
+      border-radius: 14px;
+      padding: 10px 14px;
+      display: flex; align-items: center; gap: 10px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.04), 0 12px 32px rgba(0,0,0,0.12);
+      border: 1px solid rgba(0,0,0,0.06);
+      animation: floatUp 3s ease-in-out infinite;
+    }
+    .fnotif-2 { animation-delay: 1.5s; }
+    @keyframes floatUp {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-6px); }
+    }
+    .fnotif-icon {
+      width: 32px; height: 32px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; flex-shrink: 0;
+    }
+    .fnotif-text {}
+    .fnotif-title { font-size: 12px; font-weight: 700; color: #111827; }
+    .fnotif-sub { font-size: 11px; color: #6B7280; margin-top: 1px; }
+    .fn-top { top: -18px; right: -12px; }
+    .fn-bot { bottom: 28px; left: -16px; }
+
+    /* Browser window */
+    .app-browser {
+      background: white;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow:
+        0 0 0 1px rgba(0,0,0,0.07),
+        0 8px 16px rgba(0,0,0,0.06),
+        0 32px 80px rgba(37,99,235,0.12),
+        0 60px 120px rgba(0,0,0,0.10);
+    }
+
+    /* Chrome bar */
+    .ab-chrome {
+      background: #F1F3F5;
+      border-bottom: 1px solid #E2E4E8;
+      padding: 9px 14px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .ab-wdots { display: flex; gap: 5px; flex-shrink: 0; }
+    .ab-wdot { width: 11px; height: 11px; border-radius: 50%; }
+    .ab-chrome-nav { display: flex; gap: 4px; }
+    .ab-chrome-btn {
+      width: 22px; height: 22px; border-radius: 6px;
+      background: #E2E4E8;
+      display: flex; align-items: center; justify-content: center;
+      color: #9CA3AF; font-size: 10px;
+    }
+    .ab-urlbar {
+      flex: 1; background: white;
+      border: 1px solid #E2E4E8; border-radius: 7px;
+      padding: 5px 10px;
+      font-size: 11px; color: #6B7280;
+      display: flex; align-items: center; gap: 6px;
+      font-family: 'Inter', sans-serif;
+    }
+    .ab-urlbar-lock {
+      display: inline-flex;
+      width: 9px; height: 10px; flex-shrink: 0;
+    }
+
+    /* App layout: sidebar + main */
+    .ab-layout {
+      display: flex;
+      height: 390px;
+    }
+
+    /* Sidebar */
+    .ab-sidebar {
+      width: 54px;
+      background: #0F172A;
+      display: flex; flex-direction: column;
+      align-items: center;
+      padding: 14px 0;
+      flex-shrink: 0;
+      gap: 4px;
+    }
+    .ab-sb-logo {
+      width: 30px; height: 30px; border-radius: 8px;
+      object-fit: contain; margin-bottom: 12px;
+    }
+    .ab-sb-item {
+      width: 38px; height: 34px; border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+    }
+    .ab-sb-item svg {
+      width: 16px; height: 16px;
+      stroke: #475569; fill: none;
+      stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+    }
+    .ab-sb-item.ab-active { background: rgba(201,168,83,0.2); }
+    .ab-sb-item.ab-active svg { stroke: #C9A853; }
+    .ab-sb-spacer { flex: 1; }
+
+    /* Main content panel */
+    .ab-main {
+      flex: 1; background: #F8FAFC;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .ab-topbar {
+      background: white;
+      border-bottom: 1px solid #EFF2F5;
+      padding: 10px 14px;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .ab-topbar-left { display: flex; align-items: center; gap: 8px; }
+    .ab-topbar-title { font-size: 13px; font-weight: 700; color: #0F172A; letter-spacing: -0.2px; }
+    .ab-refresh {
+      font-size: 11px; color: #94A3B8;
+      display: flex; align-items: center;
+    }
+    .ab-avatar {
+      width: 26px; height: 26px; border-radius: 50%;
+      background: linear-gradient(135deg, #1A2844, #C9A853);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 700; color: white;
+    }
+    .ab-scroll {
+      flex: 1; overflow-y: auto; padding: 11px;
+    }
+    .ab-scroll::-webkit-scrollbar { display: none; }
+    .ab-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+
+    /* Filter tabs */
+    .ab-tabs {
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      background: white; border: 1px solid #E8EDF3;
+      border-radius: 10px; overflow: hidden; margin-bottom: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .ab-tab {
+      font-size: 10px; font-weight: 600; padding: 8px 4px;
+      text-align: center; color: #94A3B8;
+    }
+    .ab-tab.active {
+      background: var(--navy); color: white; border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(26,40,68,0.25);
+    }
+
+    /* Finance card */
+    .ab-finance {
+      border-radius: 14px;
+      background: linear-gradient(135deg, #0F1A2E 0%, #1A2844 55%, #243660 100%);
+      padding: 14px 14px 12px;
+      margin-bottom: 9px;
+      position: relative; overflow: hidden;
+    }
+    .ab-finance::before {
+      content: '';
+      position: absolute; top: -40px; right: -40px;
+      width: 140px; height: 140px; border-radius: 50%;
+      background: rgba(255,255,255,0.07);
+    }
+    .ab-finance::after {
+      content: '';
+      position: absolute; bottom: -20px; left: 30px;
+      width: 80px; height: 80px; border-radius: 50%;
+      background: rgba(255,255,255,0.04);
+    }
+    .ab-fin-eyebrow {
+      font-size: 9px; font-weight: 500; color: rgba(255,255,255,0.6);
+      text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px;
+    }
+    .ab-fin-label { font-size: 10px; color: rgba(255,255,255,0.65); margin-bottom: 2px; }
+    .ab-fin-amount { font-size: 22px; font-weight: 800; color: white; letter-spacing: -0.5px; margin-bottom: 12px; }
+    .ab-fin-row {
+      display: grid; grid-template-columns: 1fr 1px 1fr 1px 1fr;
+      background: rgba(0,0,0,0.18); border-radius: 9px;
+      padding: 8px 0; position: relative; z-index: 1;
+    }
+    .ab-fin-div { background: rgba(255,255,255,0.15); align-self: stretch; }
+    .ab-fin-stat { text-align: center; padding: 0 4px; }
+    .ab-fin-stat-icon { font-size: 13px; margin-bottom: 3px; }
+    .ab-fin-stat-val { font-size: 11px; font-weight: 800; }
+    .afs-col { color: #86EFAC; }
+    .afs-pen { color: #FDE68A; }
+    .afs-exp { color: #FCA5A5; }
+    .ab-fin-stat-lbl { font-size: 8px; color: rgba(255,255,255,0.5); margin-top: 1px; }
+
+    /* Net balance */
+    .ab-balance {
+      background: #FFF5F5; border: 1px solid #FECACA;
+      border-radius: 8px; padding: 7px 10px;
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .ab-bal-l {
+      font-size: 10px; font-weight: 700; color: #DC2626;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .ab-bal-r { font-size: 10px; font-weight: 700; color: #DC2626; }
+
+    /* Section header */
+    .ab-sh { margin-bottom: 6px; }
+    .ab-sh-title { font-size: 11px; font-weight: 700; color: #0F172A; }
+    .ab-sh-sub { font-size: 9px; color: #94A3B8; margin-top: 1px; }
+
+    /* Status cards row */
+    .ab-status-row {
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      gap: 6px; margin-bottom: 9px;
+    }
+    .ab-scard {
+      background: white; border: 1px solid #EFF2F5;
+      border-radius: 10px; padding: 9px 6px;
+      text-align: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .ab-scard-icon {
+      width: 26px; height: 26px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 5px; font-size: 11px;
+    }
+    .ab-scard-num { font-size: 17px; font-weight: 800; letter-spacing: -0.5px; }
+    .ab-scard-lbl { font-size: 8px; color: #94A3B8; margin-top: 2px; }
+
+    /* Complaint list */
+    .ab-cl-lbl {
+      font-size: 9px; font-weight: 700; color: #64748B;
+      text-transform: uppercase; letter-spacing: 0.5px;
+      margin-bottom: 5px; display: flex; align-items: center; gap: 4px;
+    }
+    .ab-cl-item {
+      display: flex; align-items: center; justify-content: space-between;
+      background: white; border: 1px solid #F0F4F8;
+      border-radius: 8px; padding: 7px 9px; margin-bottom: 4px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    }
+    .ab-cl-left { display: flex; align-items: center; gap: 6px; }
+    .ab-cdot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .ab-cl-name { font-size: 10px; font-weight: 500; color: #0F172A; }
+    .ab-cbadge { font-size: 8px; font-weight: 700; padding: 2px 7px; border-radius: 100px; }
+
+    /* Member cards */
+    .ab-mem-row {
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      gap: 6px; margin-top: 3px;
+    }
+    .ab-mcard {
+      background: white; border: 1px solid #EFF2F5;
+      border-radius: 10px; padding: 9px 6px;
+      text-align: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .ab-mcard-icon {
+      width: 26px; height: 26px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 5px; font-size: 11px;
+    }
+    .ab-mcard-num { font-size: 17px; font-weight: 800; letter-spacing: -0.5px; color: var(--navy); }
+    .ab-mcard-lbl { font-size: 8px; color: #94A3B8; margin-top: 2px; }
+
+    .green { color: var(--success); }
+    .amber { color: var(--warning); }
+    .red-t { color: var(--error); }
+
+
+
+    /* ── FEATURES ──────────────────────────────────────── */
+    .features { padding: 100px 0; background: #FAFBFF; }
+    .features-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 16px; margin-top: 56px;
+    }
+    .feature-cell {
+      background: var(--white); padding: 28px 26px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      transition: transform 0.2s, box-shadow 0.2s;
+      position: relative; overflow: hidden;
+    }
+    .feature-cell::before {
+      content: ''; position: absolute;
+      top: 0; left: 0; right: 0; height: 3px;
+      background: var(--feature-accent, var(--blue));
+      opacity: 0; transition: opacity 0.2s;
+    }
+    .feature-cell:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    }
+    .feature-cell:hover::before { opacity: 1; }
+    .feature-icon-wrap {
+      width: 46px; height: 46px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 16px;
+    }
+    .feature-icon-wrap svg { width: 22px; height: 22px; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .feature-name { font-size: 15px; font-weight: 700; color: var(--dark); margin-bottom: 8px; }
+    .feature-desc { font-size: 13px; color: var(--muted); line-height: 1.65; }
+
+    /* ── HOW IT WORKS ──────────────────────────────────── */
+    .hiw { padding: 96px 0; }
+    .hiw-tabs {
+      display: inline-flex; gap: 4px;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 10px; padding: 4px;
+      margin: 40px auto 48px; display: flex; width: fit-content;
+    }
+    .hiw-tab {
+      font-size: 14px; font-weight: 600;
+      padding: 9px 22px; border-radius: 7px;
+      cursor: pointer; color: var(--muted);
+      border: none; background: transparent;
+      transition: all 0.18s;
+    }
+    .hiw-tab.active {
+      background: var(--white); color: var(--dark);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08), 0 0 0 1px var(--border);
+    }
+    .hiw-content { display: none; }
+    .hiw-content.active { display: grid; grid-template-columns: repeat(3,1fr); gap: 24px; }
+    .hiw-step {
+      padding: 28px 24px;
+      border: 1px solid var(--border);
+      border-radius: 14px; background: var(--white);
+      position: relative;
+    }
+    .hiw-num {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: var(--gold); color: var(--navy);
+      font-size: 16px; font-weight: 800;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 16px;
+    }
+    .hiw-step-title { font-size: 16px; font-weight: 700; color: var(--dark); margin-bottom: 8px; }
+    .hiw-step-desc { font-size: 13px; color: var(--muted); line-height: 1.65; }
+
+    /* ── ROLES ─────────────────────────────────────────── */
+    .roles { padding: 96px 0; background: var(--bg); }
+    .roles-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 56px; }
+    .role-card {
+      border-radius: 16px; padding: 36px;
+      border: 1px solid var(--border);
+    }
+    .role-dark {
+      background: var(--navy);
+      border-color: #0F1A2E;
+    }
+    .role-light { background: var(--white); border-color: var(--gold-mid); }
+    .role-badge {
+      display: inline-block; font-size: 11px; font-weight: 700;
+      letter-spacing: 0.8px; text-transform: uppercase;
+      padding: 5px 12px; border-radius: 100px;
+      margin-bottom: 20px;
+    }
+    .role-badge-dark { background: rgba(201,168,83,0.15); color: var(--gold); border: 1px solid rgba(201,168,83,0.3); }
+    .role-badge-light { background: var(--gold-light); color: var(--navy); border: 1px solid var(--gold-mid); }
+    .role-title { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 10px; }
+    .role-title-dark { color: var(--white); }
+    .role-title-light { color: var(--dark); }
+    .role-desc { font-size: 14px; margin-bottom: 24px; line-height: 1.7; }
+    .role-desc-dark { color: #9CA3AF; }
+    .role-desc-light { color: var(--muted); }
+    .role-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+    .role-list li { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; }
+    .role-list li.dark-li { color: #D1D5DB; }
+    .role-list li.light-li { color: var(--dark); }
+    .check {
+      width: 18px; height: 18px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; margin-top: 2px;
+    }
+    .check-d { background: rgba(201,168,83,0.15); }
+    .check-l { background: var(--gold-light); }
+    .check svg { width: 10px; height: 10px; }
+
+    /* ── CONTACT ───────────────────────────────────────── */
+    .contact { padding: 96px 0; }
+    .contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: start; margin-top: 56px; }
+    .contact-info {}
+    .contact-info-title { font-size: 22px; font-weight: 700; color: var(--dark); margin-bottom: 12px; }
+    .contact-info-desc { font-size: 15px; color: var(--muted); line-height: 1.7; margin-bottom: 32px; }
+    .contact-detail {
+      display: flex; align-items: center; gap: 14px;
+      padding: 16px 0; border-bottom: 1px solid var(--border);
+    }
+    .contact-detail:first-of-type { border-top: 1px solid var(--border); }
+    .contact-detail-icon {
+      width: 40px; height: 40px; border-radius: 10px;
+      background: var(--gold-light); border: 1px solid var(--gold-mid);
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .contact-detail-icon svg { width: 18px; height: 18px; stroke: var(--navy); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .contact-detail-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; color: var(--faint); }
+    .contact-detail-val { font-size: 15px; font-weight: 600; color: var(--dark); margin-top: 2px; }
+
+    /* Form */
+    .contact-form {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: 16px; padding: 32px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.05);
+    }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+    .form-group label { font-size: 13px; font-weight: 600; color: var(--dark); }
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+      font-family: 'Inter', sans-serif;
+      font-size: 14px; color: var(--dark);
+      padding: 10px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px; background: var(--white);
+      outline: none; transition: border-color 0.15s;
+      width: 100%;
+    }
+    .form-group input:focus,
+    .form-group textarea:focus,
+    .form-group select:focus { border-color: var(--navy); box-shadow: 0 0 0 3px rgba(201,168,83,0.12); }
+    .form-group textarea { resize: vertical; min-height: 100px; }
+    .form-group input::placeholder,
+    .form-group textarea::placeholder { color: var(--faint); }
+    .form-submit { width: 100%; }
+    .form-note { font-size: 12px; color: var(--faint); margin-top: 10px; text-align: center; }
+    #form-success {
+      display: none; text-align: center; padding: 20px 0;
+      color: var(--success); font-size: 15px; font-weight: 600;
+    }
+
+    /* ── CTA BANNER ────────────────────────────────────── */
+    .cta-banner {
+      margin: 0; padding: 80px 0;
+      background: var(--navy); text-align: center;
+      position: relative; overflow: hidden;
+    }
+    .cta-banner::before {
+      content: '';
+      position: absolute; top: -80px; left: 50%;
+      transform: translateX(-50%);
+      width: 600px; height: 300px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(201,168,83,0.12) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .cta-banner h2 {
+      font-size: clamp(28px, 4vw, 46px);
+      font-weight: 900; letter-spacing: -1.5px;
+      color: var(--white); margin-bottom: 14px; line-height: 1.1;
+    }
+    .cta-banner h2 span { color: var(--gold); }
+    .cta-banner p { font-size: 16px; color: rgba(255,255,255,0.55); margin-bottom: 32px; }
+    .cta-banner-btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn-white {
+      background: var(--gold); color: var(--navy);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.08), 0 4px 16px rgba(201,168,83,0.3);
+      font-weight: 700;
+    }
+    .btn-white:hover { background: var(--gold-hover); transform: translateY(-1px); }
+    .btn-ghost-white {
+      background: transparent; color: rgba(255,255,255,0.8);
+      border: 1.5px solid rgba(255,255,255,0.2);
+    }
+    .btn-ghost-white:hover { border-color: var(--gold); color: var(--gold); transform: translateY(-1px); }
+
+    /* ── FOOTER ────────────────────────────────────────── */
+    footer {
+      background: #030712;
+      border-top: 1px solid #111827;
+      padding: 48px 0 28px;
+    }
+    .footer-top {
+      display: grid; grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 40px; margin-bottom: 40px; padding-bottom: 40px;
+      border-bottom: 1px solid #111827;
+    }
+    .footer-brand {}
+    .footer-logo { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+    .footer-logo img { width: 28px; height: 28px; border-radius: 6px; object-fit: contain; }
+    .footer-logo-text { font-size: 17px; font-weight: 800; color: white; }
+    .footer-logo-text span { color: var(--gold); }
+    .footer-brand-desc { font-size: 13px; color: #6B7280; line-height: 1.65; max-width: 220px; }
+    .footer-col-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #9CA3AF; margin-bottom: 14px; }
+    .footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+    .footer-col ul li a { font-size: 13px; color: #6B7280; transition: color 0.15s; }
+    .footer-col ul li a:hover { color: #D1D5DB; }
+    .footer-bottom {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 12px;
+    }
+    .footer-copy { font-size: 12px; color: #374151; }
+    .footer-links { display: flex; gap: 20px; }
+    .footer-links a { font-size: 12px; color: #374151; transition: color 0.15s; }
+    .footer-links a:hover { color: #6B7280; }
+
+    /* ── ANIMATIONS ────────────────────────────────────── */
+    .reveal {
+      opacity: 0; transform: translateY(20px);
+      transition: opacity 0.55s ease, transform 0.55s ease;
+    }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+    .reveal-delay-1 { transition-delay: 0.1s; }
+    .reveal-delay-2 { transition-delay: 0.2s; }
+    .reveal-delay-3 { transition-delay: 0.3s; }
+
+    /* ── MOBILE ────────────────────────────────────────── */
+    @media (max-width: 900px) {
+      /* Nav */
+      .nav-links { display: none; }
+      .nav-signin { display: none; }
+      .hamburger { display: flex; }
+      .nav-inner { gap: 12px; }
+      .nav-links.open {
+        display: flex; flex-direction: column;
+        position: fixed; top: 64px; left: 0; right: 0;
+        background: white; border-bottom: 1px solid var(--border);
+        padding: 20px 24px; gap: 18px; z-index: 998;
+      }
+      .nav-links.open li a {
+        font-size: 16px; font-weight: 600; color: var(--dark);
+      }
+      .nav-cta { font-size: 13px; padding: 8px 14px; }
+
+      /* Hero */
+      .hero { padding: 96px 0 52px; }
+      .hero-grid { grid-template-columns: 1fr; gap: 0; }
+      .hero-right { display: none; }
+      .hero h1 { font-size: clamp(30px, 8vw, 44px); letter-spacing: -1.5px; margin-bottom: 16px; }
+      .hero-desc { font-size: 15px; max-width: 100%; margin-bottom: 28px; }
+      .hero-eyebrow { font-size: 11px; padding: 5px 12px; margin-bottom: 18px; }
+      .hero-actions .btn { padding: 13px 22px; font-size: 15px; }
+      .hero-note { font-size: 12px; margin-top: 16px; }
+
+      /* Sections */
+      .features { padding: 56px 0; }
+      .features-grid { grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 32px; }
+      .feature-cell { padding: 20px 16px; border-radius: 12px; }
+      .feature-name { font-size: 13px; }
+      .feature-desc { font-size: 12px; }
+      .feature-icon-wrap { width: 38px; height: 38px; margin-bottom: 12px; }
+
+      .hiw { padding: 56px 0; }
+      .hiw-content.active { grid-template-columns: 1fr; gap: 12px; }
+      .hiw-step { padding: 20px 18px; }
+
+      .roles { padding: 56px 0; }
+      .roles-grid { grid-template-columns: 1fr; gap: 12px; margin-top: 32px; }
+      .role-card { padding: 24px 22px; }
+
+      .contact { padding: 56px 0; }
+      .contact-grid { grid-template-columns: 1fr; gap: 36px; }
+
+      .cta-banner { padding: 56px 0; }
+
+      /* Footer */
+      .footer-top { grid-template-columns: 1fr 1fr; gap: 24px; }
+      .form-row { grid-template-columns: 1fr; }
+      .section-title { font-size: clamp(24px, 6vw, 36px); }
+      .section-sub { font-size: 15px; }
+    }
+
+    @media (max-width: 560px) {
+      /* Nav */
+      .nav-logo-text { font-size: 17px; }
+      .nav-cta { font-size: 12px; padding: 7px 12px; }
+
+      /* Hero */
+      .hero { padding: 80px 0 44px; }
+      .hero h1 { font-size: clamp(26px, 8vw, 36px); letter-spacing: -1px; margin-bottom: 14px; }
+      .hero-desc { font-size: 14px; line-height: 1.65; margin-bottom: 24px; }
+      .hero-actions { gap: 10px; }
+      .hero-actions .btn { padding: 12px 20px; font-size: 14px; border-radius: 9px; }
+      .hero-note { font-size: 12px; }
+      .hero-eyebrow { font-size: 10px; }
+
+      /* Features — single column on very small */
+      .features { padding: 48px 0; }
+      .features-grid { grid-template-columns: 1fr; gap: 8px; margin-top: 24px; }
+      .feature-cell { padding: 18px 16px; border-radius: 10px; }
+
+      /* How it works */
+      .hiw { padding: 48px 0; }
+      .hiw-tabs { width: 100%; justify-content: stretch; }
+      .hiw-tab { flex: 1; padding: 9px 8px; font-size: 13px; }
+      .hiw-step { padding: 18px 16px; }
+
+      /* Roles */
+      .roles { padding: 48px 0; }
+      .role-card { padding: 22px 18px; }
+      .role-title { font-size: 19px; }
+
+      /* Contact */
+      .contact { padding: 48px 0; }
+      .contact-form { padding: 22px 16px; }
+      .contact-grid { gap: 28px; }
+
+      /* CTA */
+      .cta-banner { padding: 48px 0; }
+      .cta-banner h2 { font-size: clamp(22px, 7vw, 32px); letter-spacing: -1px; }
+      .cta-banner p { font-size: 14px; }
+      .cta-banner-btns { flex-direction: column; align-items: center; gap: 10px; }
+      .cta-banner-btns .btn { width: 100%; max-width: 260px; justify-content: center; }
+
+      /* Footer */
+      .footer-top { grid-template-columns: 1fr; gap: 20px; }
+      .footer-bottom { flex-direction: column; text-align: center; gap: 8px; }
+      footer { padding: 36px 0 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── NAV ──────────────────────────────────────────────────────────────── -->
+<nav>
+  <div class="container nav-inner">
+    <a href="/" class="nav-logo">
+      <img src="logo.png" alt="GateBasic logo"/>
+      <span class="nav-logo-text">Gate<span>Basic</span></span>
+    </a>
+    <ul class="nav-links" id="navLinks">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#how-it-works">How it works</a></li>
+      <li><a href="#for-you">For you</a></li>
+      <li><a href="#contact">Contact</a></li>
+    </ul>
+    <div class="nav-right">
+      <a href="https://app.gatebasic.com" class="nav-signin">Sign in</a>
+      <a href="https://app.gatebasic.com" class="nav-cta">Get started →</a>
+    </div>
+    <div class="hamburger" id="hamburger" onclick="toggleNav()">
+      <span></span><span></span><span></span>
+    </div>
+  </div>
+</nav>
+
+<!-- ── HERO ──────────────────────────────────────────────────────────────── -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-grid">
+      <div class="hero-left reveal">
+        <div class="hero-eyebrow">
+          <span class="hero-eyebrow-dot"></span>
+          India's Leading Residential Community Management Platform
+        </div>
+        <h1>Your community,<br/><em>finally organised.</em></h1>
+        <p class="hero-desc">
+          One intelligent platform that handles payments, complaints, notices,expenses, 
+          and everything in between — for residents and managers alike.
+        </p>
+        <div class="hero-actions">
+          <a href="https://app.gatebasic.com" class="btn btn-blue">Get started</a>
+          <a href="#features" class="btn btn-outline">See features</a>
+        </div>
+        <div class="hero-note">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 3v4l3 2"/></svg>
+          Up and running in under 10 minutes
+        </div>
+
+      </div>
+      <div class="hero-right reveal reveal-delay-2">
+        <div style="position:relative;">
+
+          <!-- Floating pill: top right -->
+          <div class="fnotif fn-top">
+            <div class="fnotif-icon" style="background:#DCFCE7;">✅</div>
+            <div class="fnotif-text">
+              <div class="fnotif-title">Payment Verified</div>
+              <div class="fnotif-sub">House 204 — ₹2,500</div>
+            </div>
+          </div>
+
+          <!-- Floating pill: bottom left -->
+          <div class="fnotif fnotif-2 fn-bot">
+            <div class="fnotif-icon" style="background:#EFF6FF;">🔔</div>
+            <div class="fnotif-text">
+              <div class="fnotif-title">Notice Published</div>
+              <div class="fnotif-sub">Sent to all 48 residents</div>
+            </div>
+          </div>
+
+          <!-- Browser frame -->
+          <div class="app-browser">
+
+            <!-- Chrome top bar -->
+            <div class="ab-chrome">
+              <div class="ab-wdots">
+                <span class="ab-wdot" style="background:#FF5F57;"></span>
+                <span class="ab-wdot" style="background:#FFBD2E;"></span>
+                <span class="ab-wdot" style="background:#28C840;"></span>
+              </div>
+              <div class="ab-chrome-nav">
+                <div class="ab-chrome-btn">←</div>
+                <div class="ab-chrome-btn">→</div>
+              </div>
+              <div class="ab-urlbar">
+                <svg class="ab-urlbar-lock" viewBox="0 0 16 16" fill="none" stroke="#16A34A" stroke-width="2" stroke-linecap="round"><rect x="3" y="7" width="10" height="8" rx="2"/><path d="M5 7V5a3 3 0 016 0v2"/></svg>
+                app.gatebasic.com
+              </div>
+            </div>
+
+            <!-- App two-panel layout -->
+            <div class="ab-layout">
+
+              <!-- Sidebar -->
+              <div class="ab-sidebar">
+                <img class="ab-sb-logo" src="logo.png" alt="GateBasic"/>
+                <!-- nav icons -->
+                <!-- Dashboard -->
+                <div class="ab-sb-item">
+                  <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+                </div>
+                <!-- Payments -->
+                <div class="ab-sb-item">
+                  <svg viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                </div>
+                <!-- Notices -->
+                <div class="ab-sb-item">
+                  <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+                </div>
+                <!-- Complaints -->
+                <div class="ab-sb-item">
+                  <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                </div>
+                <!-- Members -->
+                <div class="ab-sb-item">
+                  <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+                </div>
+                <!-- Reports (active) -->
+                <div class="ab-sb-item ab-active">
+                  <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                </div>
+                <div class="ab-sb-spacer"></div>
+                <!-- Profile -->
+                <div class="ab-sb-item">
+                  <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </div>
+              </div>
+
+              <!-- Main content -->
+              <div class="ab-main">
+                <!-- Top bar -->
+                <div class="ab-topbar">
+                  <div class="ab-topbar-left">
+                    <div class="ab-topbar-title">Reports &amp; Analytics</div>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <div class="ab-refresh">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                    </div>
+                    <div class="ab-avatar">AK</div>
+                  </div>
+                </div>
+
+                <!-- Scrollable content -->
+                <div class="ab-scroll">
+
+                  <!-- Filter tabs -->
+                  <div class="ab-tabs">
+                    <div class="ab-tab active">This Month</div>
+                    <div class="ab-tab">Last Month</div>
+                    <div class="ab-tab">All Time</div>
+                  </div>
+
+                  <!-- Finance card -->
+                  <div class="ab-finance">
+                    <div class="ab-fin-eyebrow">Finance Overview · May 2026</div>
+                    <div class="ab-fin-label">Total Billed</div>
+                    <div class="ab-fin-amount">₹2,45,000</div>
+                    <div class="ab-fin-row">
+                      <div class="ab-fin-stat">
+                        <div class="ab-fin-stat-icon">✓</div>
+                        <div class="ab-fin-stat-val afs-col">₹1,84K</div>
+                        <div class="ab-fin-stat-lbl">Collected</div>
+                      </div>
+                      <div class="ab-fin-div"></div>
+                      <div class="ab-fin-stat">
+                        <div class="ab-fin-stat-icon">⏳</div>
+                        <div class="ab-fin-stat-val afs-pen">₹61K</div>
+                        <div class="ab-fin-stat-lbl">Pending</div>
+                      </div>
+                      <div class="ab-fin-div"></div>
+                      <div class="ab-fin-stat">
+                        <div class="ab-fin-stat-icon">🧾</div>
+                        <div class="ab-fin-stat-val afs-exp">₹38.5K</div>
+                        <div class="ab-fin-stat-lbl">Expenses</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Net Balance -->
+                  <div class="ab-balance">
+                    <div class="ab-bal-l">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>
+                      Net Balance
+                    </div>
+                    <div class="ab-bal-r">₹1,45,500 surplus</div>
+                  </div>
+
+                  <!-- Complaints header -->
+                  <div class="ab-sh" style="margin-top:9px;">
+                    <div class="ab-sh-title">Complaints &amp; Issues</div>
+                    <div class="ab-sh-sub">12 total this month</div>
+                  </div>
+
+                  <!-- Status cards -->
+                  <div class="ab-status-row">
+                    <div class="ab-scard">
+                      <div class="ab-scard-icon" style="background:#FEE2E2;">⛔</div>
+                      <div class="ab-scard-num" style="color:#DC2626;">4</div>
+                      <div class="ab-scard-lbl">Open</div>
+                    </div>
+                    <div class="ab-scard">
+                      <div class="ab-scard-icon" style="background:#FEF3C7;">⚠️</div>
+                      <div class="ab-scard-num" style="color:#D97706;">6</div>
+                      <div class="ab-scard-lbl">In Progress</div>
+                    </div>
+                    <div class="ab-scard">
+                      <div class="ab-scard-icon" style="background:#DCFCE7;">✅</div>
+                      <div class="ab-scard-num" style="color:#16A34A;">2</div>
+                      <div class="ab-scard-lbl">Resolved</div>
+                    </div>
+                  </div>
+
+                  <!-- Recent complaints -->
+                  <div class="ab-cl-lbl">
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    Recent Complaints
+                  </div>
+                  <div class="ab-cl-item">
+                    <div class="ab-cl-left">
+                      <div class="ab-cdot" style="background:#DC2626;"></div>
+                      <div class="ab-cl-name">Broken lift — Block A</div>
+                    </div>
+                    <span class="ab-cbadge" style="background:#FEE2E2;color:#DC2626;">Open</span>
+                  </div>
+                  <div class="ab-cl-item">
+                    <div class="ab-cl-left">
+                      <div class="ab-cdot" style="background:#D97706;"></div>
+                      <div class="ab-cl-name">Pipeline damaged — B2</div>
+                    </div>
+                    <span class="ab-cbadge" style="background:#FEF3C7;color:#D97706;">In Progress</span>
+                  </div>
+                  <div class="ab-cl-item">
+                    <div class="ab-cl-left">
+                      <div class="ab-cdot" style="background:#D97706;"></div>
+                      <div class="ab-cl-name">Street lamp — Gate 2</div>
+                    </div>
+                    <span class="ab-cbadge" style="background:#FEF3C7;color:#D97706;">In Progress</span>
+                  </div>
+
+                  <!-- Member summary -->
+                  <div class="ab-sh" style="margin-top:9px;">
+                    <div class="ab-sh-title">Member Summary</div>
+                    <div class="ab-sh-sub">48 residents · 32 units</div>
+                  </div>
+                  <div class="ab-mem-row">
+                    <div class="ab-mcard">
+                      <div class="ab-mcard-icon" style="background:#F4F0E8;">👥</div>
+                      <div class="ab-mcard-num" style="color:#1A2844;">48</div>
+                      <div class="ab-mcard-lbl">Total</div>
+                    </div>
+                    <div class="ab-mcard">
+                      <div class="ab-mcard-icon" style="background:#F4F0E8;">🏠</div>
+                      <div class="ab-mcard-num" style="color:#1A2844;">31</div>
+                      <div class="ab-mcard-lbl">Owners</div>
+                    </div>
+                    <div class="ab-mcard">
+                      <div class="ab-mcard-icon" style="background:#FBF6E9;">🔑</div>
+                      <div class="ab-mcard-num" style="color:#C9A853;">17</div>
+                      <div class="ab-mcard-lbl">Tenants</div>
+                    </div>
+                  </div>
+
+                </div><!-- /ab-scroll -->
+              </div><!-- /ab-main -->
+            </div><!-- /ab-layout -->
+          </div><!-- /app-browser -->
+
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FEATURES ───────────────────────────────────────────────────────────── -->
+<section class="features" id="features">
+  <div class="container">
+    <div class="center reveal">
+      <span class="tag">Features</span>
+      <h2 class="section-title">Everything in one place</h2>
+      <p class="section-sub">Built to replace scattered WhatsApp groups, Excel sheets, and manual follow-ups — for good.</p>
+    </div>
+    <div class="features-grid reveal">
+      <div class="feature-cell" style="--feature-accent:#C9A853;">
+        <div class="feature-icon-wrap" style="background:#FBF6E9;">
+          <svg viewBox="0 0 24 24" stroke="#1A2844"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+        </div>
+        <div class="feature-name">Smart Payments</div>
+        <div class="feature-desc">Auto-generated monthly invoices. Residents upload proof, admins verify in one tap. No more chasing.</div>
+      </div>
+      <div class="feature-cell" style="--feature-accent:#DC2626;">
+        <div class="feature-icon-wrap" style="background:#FEF2F2;">
+          <svg viewBox="0 0 24 24" stroke="#DC2626"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        </div>
+        <div class="feature-name">Complaint Tracking</div>
+        <div class="feature-desc">Residents raise issues digitally. Admins update status and give feedback. Everything is on record.</div>
+      </div>
+      <div class="feature-cell" style="--feature-accent:#7C3AED;">
+        <div class="feature-icon-wrap" style="background:#F5F3FF;">
+          <svg viewBox="0 0 24 24" stroke="#7C3AED"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+        </div>
+        <div class="feature-name">Digital Notices</div>
+        <div class="feature-desc">Post announcements instantly. Every resident gets notified. No missed messages, no confusion.</div>
+      </div>
+      <div class="feature-cell" style="--feature-accent:#16A34A;">
+        <div class="feature-icon-wrap" style="background:#F0FDF4;">
+          <svg viewBox="0 0 24 24" stroke="#16A34A"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+        </div>
+        <div class="feature-name">Expense Reports</div>
+        <div class="feature-desc">Log monthly expenses and share them with residents. Full financial transparency builds trust.</div>
+      </div>
+      <div class="feature-cell" style="--feature-accent:#EA580C;">
+        <div class="feature-icon-wrap" style="background:#FFF7ED;">
+          <svg viewBox="0 0 24 24" stroke="#EA580C"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+        </div>
+        <div class="feature-name">Member Management</div>
+        <div class="feature-desc">Owners, tenants, family — all under one account. Add or remove members with a tap.</div>
+      </div>
+      <div class="feature-cell" style="--feature-accent:#0891B2;">
+        <div class="feature-icon-wrap" style="background:#ECFEFF;">
+          <svg viewBox="0 0 24 24" stroke="#0891B2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+        </div>
+        <div class="feature-name">QR Entry Pass</div>
+        <div class="feature-desc">Every resident gets a unique QR code with name, house, and vehicle details for seamless gate access.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── HOW IT WORKS ───────────────────────────────────────────────────────── -->
+<section class="hiw" id="how-it-works">
+  <div class="container">
+    <div class="center reveal">
+      <span class="tag">How it works</span>
+      <h2 class="section-title">Up and running in minutes</h2>
+      <p class="section-sub">Simple for residents. Powerful for admins. No training needed.</p>
+    </div>
+    <div class="hiw-tabs reveal">
+      <button class="hiw-tab active" onclick="switchTab(this,'hiw-admin')">For Admins</button>
+      <button class="hiw-tab" onclick="switchTab(this,'hiw-resident')">For Residents</button>
+    </div>
+    <div class="hiw-content active" id="hiw-admin">
+      <div class="hiw-step reveal">
+        <div class="hiw-num">1</div>
+        <div class="hiw-step-title">Set up your community</div>
+        <div class="hiw-step-desc">Create your community profile, add units and residents. Takes less than 10 minutes to get fully configured.</div>
+      </div>
+      <div class="hiw-step reveal reveal-delay-1">
+        <div class="hiw-num">2</div>
+        <div class="hiw-step-title">Manage dues & payments</div>
+        <div class="hiw-step-desc">Monthly invoices are generated automatically. Verify payments, send notices, and handle demand dues — all from one screen.</div>
+      </div>
+      <div class="hiw-step reveal reveal-delay-2">
+        <div class="hiw-num">3</div>
+        <div class="hiw-step-title">Track with live reports</div>
+        <div class="hiw-step-desc">Real-time dashboard showing finances, complaints, and member status. Know exactly what's happening, always.</div>
+      </div>
+    </div>
+    <div class="hiw-content" id="hiw-resident">
+      <div class="hiw-step reveal">
+        <div class="hiw-num">1</div>
+        <div class="hiw-step-title">Get your invite</div>
+        <div class="hiw-step-desc">Your admin adds you to the platform. You get login credentials and can sign in immediately — no setup needed.</div>
+      </div>
+      <div class="hiw-step reveal reveal-delay-1">
+        <div class="hiw-num">2</div>
+        <div class="hiw-step-title">Pay & stay informed</div>
+        <div class="hiw-step-desc">View your invoice, upload payment proof, and get notified the moment it's verified. Read notices as they're posted.</div>
+      </div>
+      <div class="hiw-step reveal reveal-delay-2">
+        <div class="hiw-num">3</div>
+        <div class="hiw-step-title">Report & enter easily</div>
+        <div class="hiw-step-desc">Raise complaints and track their resolution. Use your personal QR pass for fast, contactless gate entry.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FOR YOU (ROLES) ────────────────────────────────────────────────────── -->
+<section class="roles" id="for-you">
+  <div class="container">
+    <div class="center reveal">
+      <span class="tag">Built for everyone</span>
+      <h2 class="section-title">Two sides, one platform</h2>
+      <p class="section-sub">Whether you manage the community or live in it, GateBasic works for you.</p>
+    </div>
+    <div class="roles-grid">
+      <div class="role-card role-dark reveal">
+        <span class="role-badge role-badge-dark">Admin Portal</span>
+        <h3 class="role-title role-title-dark">Full control, zero chaos</h3>
+        <p class="role-desc role-desc-dark">A powerful dashboard built for community managers who need complete visibility without the complexity.</p>
+        <ul class="role-list">
+          <li class="dark-li"><div class="check check-d"><svg viewBox="0 0 10 10" fill="none" stroke="#C9A853" stroke-width="1.5"><path d="M8 2.5L4 7 2 5"/></svg></div>Live reports & analytics</li>
+          <li class="dark-li"><div class="check check-d"><svg viewBox="0 0 10 10" fill="none" stroke="#C9A853" stroke-width="1.5"><path d="M8 2.5L4 7 2 5"/></svg></div>Payment verification & rejection</li>
+          <li class="dark-li"><div class="check check-d"><svg viewBox="0 0 10 10" fill="none" stroke="#C9A853" stroke-width="1.5"><path d="M8 2.5L4 7 2 5"/></svg></div>Demand dues & special charges</li>
+          <li class="dark-li"><div class="check check-d"><svg viewBox="0 0 10 10" fill="none" stroke="#C9A853" stroke-width="1.5"><path d="M8 2.5L4 7 2 5"/></svg></div>Complaint status management</li>
+          <li class="dark-li"><div class="check check-d"><svg viewBox="0 0 10 10" fill="none" stroke="#C9A853" stroke-width="1.5"><path d="M8 2.5L4 7 2 5"/></svg></div>Full member directory & reports</li>
+        </ul>
+      </div>
+      <div class="role-card role-light reveal reveal-delay-1">
+        <span class="role-badge role-badge-light">Resident Portal</span>
+        <h3 class="role-title role-title-light">Simple, fast, stress-free</h3>
+        <p class="role-desc role-desc-light">Everything a resident needs — nothing they don't. Clean, intuitive, and works on any Android device.</p>
+        <ul class="role-list">
+          <li class="light-li"><div class="check check-l"><svg viewBox="0 0 10 10" fill="none" stroke="#1A2844" stroke-width="1.5"><path d="M8 2.5L4 7 2 5"/></svg></div>View & pay monthly dues</li>
+          <li class="light-li"><div class="check check-l"><svg viewBox="0 0 10 10" fill="none" stroke="#1A2844" stroke-width="1.5"><path d="M8 2.5L4 7 2 5"/></svg></div>Raise and track complaints</li>
+          <li class="light-li"><div class="check check-l"><svg viewBox="0 0 10 10" fill="none" stroke="#1A2844" stroke-width="1.5"><path d="M8 2.5L4 7 2 5"/></svg></div>Read community notices</li>
+          <li class="light-li"><div class="check check-l"><svg viewBox="0 0 10 10" fill="none" stroke="#1A2844" stroke-width="1.5"><path d="M8 2.5L4 7 2 5"/></svg></div>QR Entry Pass with vehicle info</li>
+          <li class="light-li"><div class="check check-l"><svg viewBox="0 0 10 10" fill="none" stroke="#1A2844" stroke-width="1.5"><path d="M8 2.5L4 7 2 5"/></svg></div>Manage flat members</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── CONTACT ────────────────────────────────────────────────────────────── -->
+<section class="contact" id="contact">
+  <div class="container">
+    <div class="reveal">
+      <span class="tag">Contact</span>
+      <h2 class="section-title">Get in touch</h2>
+      <p class="section-sub">Have a question, want a demo, or ready to onboard your community? We'd love to hear from you.</p>
+    </div>
+    <div class="contact-grid">
+      <div class="contact-info reveal">
+        <h3 class="contact-info-title">We're here to help</h3>
+        <p class="contact-info-desc">Whether you're evaluating GateBasic or need support, reach out and we'll get back to you within 24 hours.</p>
+        <div class="contact-detail">
+          <div class="contact-detail-icon">
+            <svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          </div>
+          <div>
+            <div class="contact-detail-label">Email</div>
+            <div class="contact-detail-val">gatebasicapp@gmail.com</div>
+          </div>
+        </div>
+        <div class="contact-detail">
+          <div class="contact-detail-icon">
+            <svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.8 19.79 19.79 0 01.22 1.18 2 2 0 012.22 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 14.92v2z"/></svg>
+          </div>
+          <div>
+            <div class="contact-detail-label">WhatsApp</div>
+            <div class="contact-detail-val">+91 9971310381</div>
+          </div>
+        </div>
+        <div class="contact-detail">
+          <div class="contact-detail-icon">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <div>
+            <div class="contact-detail-label">Response time</div>
+            <div class="contact-detail-val">Within 24 hours</div>
+          </div>
+        </div>
+      </div>
+      <div class="contact-form reveal reveal-delay-1">
+        <form id="contactForm" onsubmit="handleSubmit(event)">
+          <div class="form-row">
+            <div class="form-group">
+              <label>First name</label>
+              <input type="text" placeholder="Ravi" required/>
+            </div>
+            <div class="form-group">
+              <label>Last name</label>
+              <input type="text" placeholder="Sharma" required/>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Email address</label>
+            <input type="email" placeholder="ravi@example.com" required/>
+          </div>
+          <div class="form-group">
+            <label>I am a</label>
+            <select>
+              <option value="">Select...</option>
+              <option>Community Manager / Admin</option>
+              <option>Resident / Owner</option>
+              <option>Developer / Partner</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Message</label>
+            <textarea placeholder="Tell us about your community or what you need help with..." required></textarea>
+          </div>
+          <button type="submit" class="btn btn-blue form-submit">Send message →</button>
+          <div class="form-note">We'll get back to you within 24 hours.</div>
+        </form>
+        <div id="form-success">
+          ✅ Message sent! We'll be in touch within 24 hours.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── CTA BANNER ─────────────────────────────────────────────────────────── -->
+<div class="cta-banner">
+  <div class="container">
+    <h2>Ready to simplify your<br/><span>community?</span></h2>
+    <p>Join hundreds of communities already on GateBasic. Get started in minutes.</p>
+    <div class="cta-banner-btns">
+      <a href="https://app.gatebasic.com" class="btn btn-white">Open the portal →</a>
+      <a href="#contact" class="btn btn-ghost-white">Talk to us</a>
+    </div>
+  </div>
+</div>
+
+<!-- ── FOOTER ─────────────────────────────────────────────────────────────── -->
+<footer>
+  <div class="container">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <div class="footer-logo">
+          <img src="logo.png" alt="GateBasic"/>
+          <span class="footer-logo-text">Gate<span>Basic</span></span>
+        </div>
+        <p class="footer-brand-desc">AI-powered community management platform. Built for modern communities.</p>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-title">Product</div>
+        <ul>
+          <li><a href="#features">Features</a></li>
+          <li><a href="#how-it-works">How it works</a></li>
+          <li><a href="https://app.gatebasic.com">Sign in</a></li>
+          <li><a href="https://app.gatebasic.com">Get started</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-title">Company</div>
+        <ul>
+          <li><a href="#contact">Contact</a></li>
+          <li><a href="mailto:hello@gatebasic.com">Email us</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-title">Legal</div>
+        <ul>
+          <li><a href="#">Privacy Policy</a></li>
+          <li><a href="#">Terms of Service</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span class="footer-copy">© 2026 GateBasic. All rights reserved.</span>
+      <div class="footer-links">
+        <a href="mailto:hello@gatebasic.com">hello@gatebasic.com</a>
+        <a href="#">Privacy</a>
+        <a href="#">Terms</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // ── Nav toggle ───────────────────────────────────────────────────────────
+  function toggleNav() {
+    document.getElementById('navLinks').classList.toggle('open');
+  }
+  document.querySelectorAll('.nav-links a').forEach(a =>
+    a.addEventListener('click', () => document.getElementById('navLinks').classList.remove('open'))
+  );
+
+  // ── Tab switcher ─────────────────────────────────────────────────────────
+  function switchTab(btn, contentId) {
+    document.querySelectorAll('.hiw-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.hiw-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(contentId).classList.add('active');
+  }
+
+  // ── Scroll reveal ────────────────────────────────────────────────────────
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+  }, { threshold: 0.1 });
+  document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+
+  // ── Contact form ─────────────────────────────────────────────────────────
+  function handleSubmit(e) {
+    e.preventDefault();
+    document.getElementById('contactForm').style.display = 'none';
+    document.getElementById('form-success').style.display = 'block';
+  }
+</script>
+</body>
+</html>

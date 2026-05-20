@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:gate_basic/theme/app_theme.dart';
+import '../../utils/dashboard_key.dart';
 
 class NoticesScreen extends StatelessWidget {
   const NoticesScreen({super.key});
@@ -14,6 +15,22 @@ class NoticesScreen extends StatelessWidget {
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
         surfaceTintColor: Colors.white,
+        leading: Navigator.canPop(context)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: () => Navigator.pop(context),
+              )
+            : IconButton(
+                icon: const Icon(Icons.menu_rounded),
+                onPressed: () => dashboardScaffoldKey.currentState?.openDrawer(),
+              ),
+        actions: [
+          if (Navigator.canPop(context))
+            IconButton(
+              icon: const Icon(Icons.menu_rounded),
+              onPressed: () => dashboardScaffoldKey.currentState?.openDrawer(),
+            ),
+        ],
         title: const Text(
           'Community Notices',
           style: TextStyle(
