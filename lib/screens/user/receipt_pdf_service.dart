@@ -12,7 +12,7 @@ class ReceiptPdfService {
   // ── Format a Firestore Timestamp or DateTime as "17 Apr 2026" ─────
   static String _formatDate(dynamic v) {
     if (v is Timestamp) return DateFormat('dd MMM yyyy').format(v.toDate());
-    if (v is DateTime)  return DateFormat('dd MMM yyyy').format(v);
+    if (v is DateTime) return DateFormat('dd MMM yyyy').format(v);
     if (v is String && v.isNotEmpty) return v;
     return '-';
   }
@@ -37,33 +37,68 @@ class ReceiptPdfService {
     // Noto Sans supports ₹, —, – and all Unicode characters the pdf package
     // default Helvetica cannot render.
     final regularFont = await PdfGoogleFonts.notoSansRegular();
-    final boldFont    = await PdfGoogleFonts.notoSansBold();
+    final boldFont = await PdfGoogleFonts.notoSansBold();
 
     final pdf = pw.Document(
       theme: pw.ThemeData.withFont(base: regularFont, bold: boldFont),
     );
 
+    Map<String, dynamic>? paymentData;
+    final paymentId = (r['payment_id'] ?? '').toString();
+    if (paymentId.isNotEmpty) {
+      final paymentSnap = await FirebaseFirestore.instance
+          .collection('payments')
+          .doc(paymentId)
+          .get();
+      paymentData = paymentSnap.data();
+    }
+
+    final invoiceId =
+        (r['invoice_id'] ?? paymentData?['invoice_id'] ?? '').toString();
+    if (invoiceData == null && invoiceId.isNotEmpty) {
+      final invoiceSnap = await FirebaseFirestore.instance
+          .collection('invoices')
+          .doc(invoiceId)
+          .get();
+      invoiceData = invoiceSnap.data();
+    }
+
     // ── Pull fields ────────────────────────────────────────────────
-    final invoiceType   = (r['invoice_type'] ?? invoiceData?['type'] ?? 'MAINTENANCE').toString();
-    final isDemand      = invoiceType == 'DEMAND';
-    final purpose       = (r['purpose'] ?? invoiceData?['title'] ?? (isDemand ? 'Special Due' : 'Monthly Maintenance')).toString();
-    final description   = (r['description'] ?? invoiceData?['description'] ?? '').toString();
-    final societyName   = (r['societyName'] ?? 'RWA Utility App').toString();
-    final userName      = (r['name'] ?? r['userName'] ?? '').toString();
-    final houseNo       = (r['house_no'] ?? r['flat'] ?? '').toString();
-    final amount        = _formatCurrency(r['amount']);
-    final methodStr     = (r['method'] ?? '—').toString();
-    final utr           = (r['utr'] ?? r['txnId'] ?? '—').toString();
-    final status        = (r['status'] ?? 'VERIFIED').toString();
-    final paymentDate   = _formatDate(r['updated_at'] ?? r['created_at']);
-    final dueDate       = _formatDate(r['due_date'] ?? invoiceData?['due_date']);
-    final month         = (r['month'] ?? invoiceData?['month'] ?? '').toString();
+    final invoiceType = (r['invoice_type'] ??
+            paymentData?['invoice_type'] ??
+            invoiceData?['type'] ??
+            'MAINTENANCE')
+        .toString();
+    final isDemand = invoiceType == 'DEMAND';
+    final purpose = (r['purpose'] ??
+            paymentData?['purpose'] ??
+            invoiceData?['title'] ??
+            (isDemand ? 'Special Due' : 'Monthly Maintenance'))
+        .toString();
+    final description =
+        (r['description'] ?? invoiceData?['description'] ?? '').toString();
+    final societyName = (r['societyName'] ?? 'Gatebasic App').toString();
+    final userName = (r['name'] ?? r['userName'] ?? '').toString();
+    final houseNo = (r['house_no'] ?? r['flat'] ?? '').toString();
+    final amount = _formatCurrency(r['amount']);
+    final methodStr = (r['method'] ?? paymentData?['method'] ?? '—').toString();
+    final cashHandedTo =
+        (r['cash_handed_to'] ?? paymentData?['cash_handed_to'] ?? '')
+            .toString();
+    final utr =
+        (r['utr'] ?? paymentData?['utr'] ?? r['txnId'] ?? '—').toString();
+    final status = (r['status'] ?? 'VERIFIED').toString();
+    final paymentDate = _formatDate(
+        r['updated_at'] ?? r['created_at'] ?? paymentData?['created_at']);
+    final dueDate = _formatDate(r['due_date'] ?? invoiceData?['due_date']);
+    final month = (r['month'] ?? invoiceData?['month'] ?? '').toString();
 
     // Month label for maintenance dues
     String monthLabel = '';
     if (!isDemand && month.isNotEmpty) {
       try {
-        monthLabel = DateFormat('MMMM yyyy').format(DateTime.parse('$month-01'));
+        monthLabel =
+            DateFormat('MMMM yyyy').format(DateTime.parse('$month-01'));
       } catch (_) {
         monthLabel = month;
       }
@@ -71,8 +106,8 @@ class ReceiptPdfService {
 
     // ── Color scheme ───────────────────────────────────────────────
     final PdfColor headerColor = isDemand
-        ? const PdfColor.fromInt(0xFF7C3AED)   // purple for demand dues
-        : const PdfColor.fromInt(0xFF1A56DB);  // blue for maintenance
+        ? const PdfColor.fromInt(0xFF7C3AED) // purple for demand dues
+        : const PdfColor.fromInt(0xFF1A56DB); // blue for maintenance
     final PdfColor lightBg = isDemand
         ? const PdfColor.fromInt(0xFFF3E8FF)
         : const PdfColor.fromInt(0xFFEBF3FF);
@@ -87,7 +122,8 @@ class ReceiptPdfService {
             // ── Header band ────────────────────────────────────────
             pw.Container(
               color: headerColor,
-              padding: const pw.EdgeInsets.symmetric(horizontal: 32, vertical: 28),
+              padding:
+                  const pw.EdgeInsets.symmetric(horizontal: 32, vertical: 28),
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
@@ -108,15 +144,19 @@ class ReceiptPdfService {
                           pw.SizedBox(height: 4),
                           pw.Text(
                             societyName,
-                            style: pw.TextStyle(fontSize: 12, color: const PdfColor(1, 1, 1, 0.7)),
+                            style: pw.TextStyle(
+                                fontSize: 12,
+                                color: const PdfColor(1, 1, 1, 0.7)),
                           ),
                         ],
                       ),
                       pw.Container(
-                        padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                        padding: const pw.EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 6),
                         decoration: pw.BoxDecoration(
                           color: PdfColors.white,
-                          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(20)),
+                          borderRadius:
+                              const pw.BorderRadius.all(pw.Radius.circular(20)),
                         ),
                         child: pw.Text(
                           status,
@@ -133,7 +173,8 @@ class ReceiptPdfService {
                   ),
                   pw.SizedBox(height: 14),
                   pw.Text('Receipt ID: $receiptId',
-                      style: pw.TextStyle(fontSize: 10, color: const PdfColor(1, 1, 1, 0.7))),
+                      style: pw.TextStyle(
+                          fontSize: 10, color: const PdfColor(1, 1, 1, 0.7))),
                 ],
               ),
             ),
@@ -150,13 +191,16 @@ class ReceiptPdfService {
                     padding: const pw.EdgeInsets.all(16),
                     decoration: pw.BoxDecoration(
                       color: lightBg,
-                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(10)),
+                      borderRadius:
+                          const pw.BorderRadius.all(pw.Radius.circular(10)),
                     ),
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Text(
-                          isDemand ? 'Special Demand Due' : 'Monthly Maintenance',
+                          isDemand
+                              ? 'Special Demand Due'
+                              : 'Monthly Maintenance',
                           style: pw.TextStyle(
                             fontSize: 10,
                             color: headerColor,
@@ -166,15 +210,20 @@ class ReceiptPdfService {
                         pw.SizedBox(height: 4),
                         pw.Text(
                           purpose,
-                          style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold),
+                          style: pw.TextStyle(
+                              fontSize: 15, fontWeight: pw.FontWeight.bold),
                         ),
                         if (monthLabel.isNotEmpty) ...[
                           pw.SizedBox(height: 2),
-                          pw.Text(monthLabel, style: const pw.TextStyle(fontSize: 11, color: PdfColors.grey700)),
+                          pw.Text(monthLabel,
+                              style: const pw.TextStyle(
+                                  fontSize: 11, color: PdfColors.grey700)),
                         ],
                         if (description.isNotEmpty) ...[
                           pw.SizedBox(height: 6),
-                          pw.Text(description, style: const pw.TextStyle(fontSize: 11, color: PdfColors.grey700)),
+                          pw.Text(description,
+                              style: const pw.TextStyle(
+                                  fontSize: 11, color: PdfColors.grey700)),
                         ],
                       ],
                     ),
@@ -195,7 +244,11 @@ class ReceiptPdfService {
                   pw.SizedBox(height: 8),
                   _pdfRow('Amount Paid', amount, bold: true),
                   _pdfRow('Payment Method', methodStr),
-                  _pdfRow('Transaction ID / UTR', utr),
+                  if (methodStr == 'CASH')
+                    _pdfRow('Cash Handed Over To',
+                        cashHandedTo.isNotEmpty ? cashHandedTo : utr)
+                  else
+                    _pdfRow('Transaction ID / UTR', utr),
                   _pdfRow('Payment Date', paymentDate),
                   if (dueDate != '-') _pdfRow('Due Date', dueDate),
 
@@ -207,13 +260,22 @@ class ReceiptPdfService {
                     padding: const pw.EdgeInsets.all(16),
                     decoration: pw.BoxDecoration(
                       color: const PdfColor.fromInt(0xFF059669),
-                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(10)),
+                      borderRadius:
+                          const pw.BorderRadius.all(pw.Radius.circular(10)),
                     ),
                     child: pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
-                        pw.Text('TOTAL PAID', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 13)),
-                        pw.Text(amount, style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 20)),
+                        pw.Text('TOTAL PAID',
+                            style: pw.TextStyle(
+                                color: PdfColors.white,
+                                fontWeight: pw.FontWeight.bold,
+                                fontSize: 13)),
+                        pw.Text(amount,
+                            style: pw.TextStyle(
+                                color: PdfColors.white,
+                                fontWeight: pw.FontWeight.bold,
+                                fontSize: 20)),
                       ],
                     ),
                   ),
@@ -226,7 +288,8 @@ class ReceiptPdfService {
                   pw.Text(
                     'This is a system-generated receipt. No signature is required.\n'
                     'Generated on ${DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now())}.',
-                    style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
+                    style: const pw.TextStyle(
+                        fontSize: 9, color: PdfColors.grey600),
                   ),
                 ],
               ),
@@ -236,7 +299,7 @@ class ReceiptPdfService {
       ),
     );
 
-    final dir  = await getApplicationDocumentsDirectory();
+    final dir = await getApplicationDocumentsDirectory();
     final file = File('${dir.path}/receipt_$receiptId.pdf');
     await file.writeAsBytes(await pdf.save());
     return file;
@@ -245,7 +308,10 @@ class ReceiptPdfService {
   static pw.Widget _pdfSectionTitle(String text) {
     return pw.Text(
       text,
-      style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800),
+      style: pw.TextStyle(
+          fontSize: 11,
+          fontWeight: pw.FontWeight.bold,
+          color: PdfColors.grey800),
     );
   }
 
@@ -255,7 +321,9 @@ class ReceiptPdfService {
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Text(label, style: const pw.TextStyle(fontSize: 11, color: PdfColors.grey700)),
+          pw.Text(label,
+              style:
+                  const pw.TextStyle(fontSize: 11, color: PdfColors.grey700)),
           pw.Text(
             value,
             style: pw.TextStyle(

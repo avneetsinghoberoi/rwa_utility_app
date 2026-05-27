@@ -22,7 +22,8 @@ class NoticesScreen extends StatelessWidget {
               )
             : IconButton(
                 icon: const Icon(Icons.menu_rounded),
-                onPressed: () => dashboardScaffoldKey.currentState?.openDrawer(),
+                onPressed: () =>
+                    dashboardScaffoldKey.currentState?.openDrawer(),
               ),
         actions: [
           if (Navigator.canPop(context))
@@ -156,4 +157,3 @@ class NoticesScreen extends StatelessWidget {
     );
   }
 }
-

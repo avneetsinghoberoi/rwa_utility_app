@@ -36,7 +36,8 @@ service cloud.firestore {
       let userData = get(/databases/$(database)/documents/users/$(userId)).data;
       let unitInfo = userData.get('unit_info', {});
       let topLevel = userData.get('house_no', '');
-      return topLevel != '' ? topLevel : unitInfo.get('house_no', '');
+      let flatNo = unitInfo.get('flat_no', '');
+      return topLevel != '' ? topLevel : (flatNo != '' ? flatNo : unitInfo.get('house_no', ''));
     }
 
     /// Check if the authenticated user lives in the same house as a given document.
@@ -49,6 +50,23 @@ service cloud.firestore {
     function isSameHouse(userId1, userId2) {
       return getUserHouseNo(userId1) == getUserHouseNo(userId2) &&
              getUserHouseNo(userId1) != '';
+    }
+
+    /// Payment submissions must be tied to one generated invoice and must match
+    /// that invoice's current remaining balance. This prevents arbitrary/random
+    /// resident-entered amounts from being submitted directly to payments.
+    function isValidInvoicePayment() {
+      let invoiceId = request.resource.data.get('invoice_id', '');
+      let invoicePath = /databases/$(database)/documents/invoices/$(invoiceId);
+      let invoice = get(invoicePath).data;
+      let remaining = invoice.get('amount', 0) - invoice.get('paid_amount', 0);
+      return invoiceId != '' &&
+             exists(invoicePath) &&
+             invoice.get('status', 'UNPAID') in ['UNPAID', 'PARTIAL'] &&
+             isSameHouseAsDoc(request.auth.uid, invoice.get('house_no', '')) &&
+             request.resource.data.house_no == invoice.get('house_no', '') &&
+             request.resource.data.amount == remaining &&
+             remaining > 0;
     }
 
     // ============================================================================
@@ -147,6 +165,18 @@ service cloud.firestore {
       allow update: if request.auth.uid != null &&
                        isAdmin(request.auth.uid);
 
+      // Resident can mark their own selected invoice as submitted after creating
+      // a matching payment. The amount/ledger fields remain admin-only.
+      allow update: if request.auth.uid != null &&
+                       isActiveUser(request.auth.uid) &&
+                       isResidentUser(request.auth.uid) &&
+                       isSameHouseAsDoc(request.auth.uid, resource.data.house_no) &&
+                       resource.data.status in ['UNPAID', 'PARTIAL'] &&
+                       request.resource.data.status == 'SUBMITTED' &&
+                       request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['status', 'submitted_payment_id',
+                                   'submitted_at', 'updated_at']);
+
       allow delete: if request.auth.uid != null &&
                        isAdmin(request.auth.uid);
     }
@@ -175,7 +205,7 @@ service cloud.firestore {
                        isResidentUser(request.auth.uid) &&
                        request.resource.data.uid == request.auth.uid &&
                        request.resource.data.status == 'SUBMITTED' &&
-                       request.resource.data.amount > 0;
+                       isValidInvoicePayment();
 
       // Only admin can verify/reject payments
       allow update: if request.auth.uid != null &&

@@ -5,6 +5,7 @@ import 'package:gate_basic/screens/admin/members_screen.dart';
 import 'package:gate_basic/theme/app_theme.dart';
 import 'package:gate_basic/utils/admin_dashboard_key.dart';
 import 'admin_dues_screen.dart';
+import 'admin_dues_sheet_screen.dart';
 import 'admin_pay_screen.dart';
 import 'admin_issues.dart';
 import 'admin_expense.dart';
@@ -35,7 +36,7 @@ class AdminDashboard extends StatefulWidget {
 }
 
 class _AdminDashboardState extends State<AdminDashboard> {
-  int _selectedIndex = 6;
+  int _selectedIndex = 7;
 
   static const List<_NavItem> _navItems = [
     _NavItem(
@@ -55,6 +56,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
       icon: Icons.request_quote_outlined,
       selectedIcon: Icons.request_quote_rounded,
       screen: AdminDuesScreen(),
+    ),
+    _NavItem(
+      label: 'Due Sheet',
+      icon: Icons.table_chart_outlined,
+      selectedIcon: Icons.table_chart_rounded,
+      screen: AdminDuesSheetScreen(),
     ),
     _NavItem(
       label: 'Issues',
@@ -138,8 +145,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             // ── Navigation items ─────────────────────────────────────
             Expanded(
               child: ListView(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
                 children: [
                   for (int i = 0; i < _navItems.length; i++)
                     _drawerTile(context, i),
@@ -150,8 +156,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             // ── Logout ───────────────────────────────────────────────
             const Divider(height: 1),
             ListTile(
-              leading:
-                  const Icon(Icons.logout_rounded, color: AppColors.error),
+              leading: const Icon(Icons.logout_rounded, color: AppColors.error),
               title: const Text(
                 'Logout',
                 style: TextStyle(
@@ -204,8 +209,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),
         ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
         onTap: () {
           setState(() => _selectedIndex = index);
           Navigator.pop(context); // close drawer

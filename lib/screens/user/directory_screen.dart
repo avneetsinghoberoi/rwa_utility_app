@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart';
 import 'package:gate_basic/theme/app_theme.dart';
 import '../../utils/dashboard_key.dart';
 
@@ -34,6 +33,9 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
   /// Filter and sort members based on search and sort preferences.
   /// Also excludes removed users (client-side, so missing status = active).
   List<DocumentSnapshot> _filterMembers(List<DocumentSnapshot> docs) {
+    final query = _searchQuery.trim();
+    final compactQuery = query.replaceAll(RegExp(r'[^a-z0-9]'), '');
+
     var filtered = docs.where((doc) {
       final data = doc.data() as Map<String, dynamic>;
 
@@ -44,10 +46,15 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
       final name = (data['name'] ?? '').toString().toLowerCase();
       final houseNo = (data['house_no'] ?? '').toString().toLowerCase();
       final phone = (data['phone'] ?? '').toString().toLowerCase();
+      final vehicleNo = (data['vehicle_no'] ?? '').toString().toLowerCase();
+      final compactVehicleNo = vehicleNo.replaceAll(RegExp(r'[^a-z0-9]'), '');
 
-      return name.contains(_searchQuery) ||
-          houseNo.contains(_searchQuery) ||
-          phone.contains(_searchQuery);
+      return query.isEmpty ||
+          name.contains(query) ||
+          houseNo.contains(query) ||
+          phone.contains(query) ||
+          vehicleNo.contains(query) ||
+          (compactQuery.isNotEmpty && compactVehicleNo.contains(compactQuery));
     }).toList();
 
     // Sort — owners always before tenants within the same house
@@ -67,8 +74,10 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
         final cmp = noA.compareTo(noB);
         if (cmp != 0) return cmp;
         // Same house: owner first (no primary_owner_uid)
-        final aIsOwner = (dataA['account_link'] as Map?)?['primary_owner_uid'] == null;
-        final bIsOwner = (dataB['account_link'] as Map?)?['primary_owner_uid'] == null;
+        final aIsOwner =
+            (dataA['account_link'] as Map?)?['primary_owner_uid'] == null;
+        final bIsOwner =
+            (dataB['account_link'] as Map?)?['primary_owner_uid'] == null;
         if (aIsOwner && !bIsOwner) return -1;
         if (!aIsOwner && bIsOwner) return 1;
         return 0;
@@ -101,7 +110,8 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
               )
             : IconButton(
                 icon: const Icon(Icons.menu_rounded),
-                onPressed: () => dashboardScaffoldKey.currentState?.openDrawer(),
+                onPressed: () =>
+                    dashboardScaffoldKey.currentState?.openDrawer(),
               ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
@@ -111,10 +121,10 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
           ),
         ),
         actions: [
-          // Drawer menu when pushed
           if (Navigator.canPop(context))
             IconButton(
-              icon: const Icon(Icons.menu_rounded, color: AppColors.textPrimary),
+              icon:
+                  const Icon(Icons.menu_rounded, color: AppColors.textPrimary),
               onPressed: () => dashboardScaffoldKey.currentState?.openDrawer(),
             ),
           // Sort menu
@@ -127,7 +137,8 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
                 value: 'house_no',
                 child: Row(
                   children: [
-                    Icon(Icons.home_outlined, size: 18, color: AppColors.primary),
+                    Icon(Icons.sort_outlined,
+                        size: 18, color: AppColors.primary),
                     SizedBox(width: 8),
                     Text('Sort by House No'),
                   ],
@@ -137,7 +148,8 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
                 value: 'name',
                 child: Row(
                   children: [
-                    Icon(Icons.person_outlined, size: 18, color: AppColors.primary),
+                    Icon(Icons.person_outlined,
+                        size: 18, color: AppColors.primary),
                     SizedBox(width: 8),
                     Text('Sort by Name'),
                   ],
@@ -147,9 +159,7 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Icon(
-                _sortBy == 'name'
-                    ? Icons.person_outlined
-                    : Icons.home_outlined,
+                _sortBy == 'name' ? Icons.person_outlined : Icons.home_outlined,
                 color: AppColors.primary,
               ),
             ),
@@ -164,7 +174,7 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
             child: TextField(
               controller: _searchController,
               decoration: AppTheme.inputDecoration(
-                'Search by name, house or phone',
+                'Search by name, house, phone or vehicle',
                 Icons.search_rounded,
               ).copyWith(
                 prefixIcon: const Icon(
@@ -194,8 +204,7 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('users')
-                  .where('role', whereIn: ['user', 'resident'])
-                  .snapshots(),
+                  .where('role', whereIn: ['user', 'resident']).snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
@@ -313,7 +322,8 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
                 }
 
                 return ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   itemCount: filteredMembers.length,
                   itemBuilder: (context, index) {
                     final member =
@@ -531,19 +541,25 @@ class _MemberCard extends StatelessWidget {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  const Icon(Icons.directions_car_rounded, size: 14, color: Color(0xFFF59E0B)),
+                  const Icon(Icons.directions_car_rounded,
+                      size: 14, color: Color(0xFFF59E0B)),
                   const SizedBox(width: 6),
                   const Text(
                     'Vehicle',
-                    style: TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(width: 10),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                     decoration: BoxDecoration(
                       color: const Color(0xFFFEF3C7),
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.4)),
+                      border: Border.all(
+                          color: const Color(0xFFF59E0B).withOpacity(0.4)),
                     ),
                     child: Text(
                       vehicleNo,

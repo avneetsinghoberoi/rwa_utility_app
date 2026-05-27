@@ -5,7 +5,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:gate_basic/config/app_config.dart';
-import 'package:gate_basic/screens/login/login_screen.dart';
 import 'package:gate_basic/utils/admin_dashboard_key.dart';
 
 class AdminIssuesScreen extends StatefulWidget {
@@ -27,7 +26,7 @@ class _AdminIssuesScreenState extends State<AdminIssuesScreen> {
     String adminFeedback = '',
   }) async {
     try {
-      final user  = FirebaseAuth.instance.currentUser;
+      final user = FirebaseAuth.instance.currentUser;
       final token = await user?.getIdToken() ?? '';
 
       final response = await http.post(
@@ -37,8 +36,8 @@ class _AdminIssuesScreenState extends State<AdminIssuesScreen> {
           'Content-Type': 'application/json',
         },
         body: jsonEncode({
-          'complaintId':   docId,
-          'status':        newStatus,
+          'complaintId': docId,
+          'status': newStatus,
           'adminFeedback': adminFeedback,
         }),
       );
@@ -89,15 +88,18 @@ class _AdminIssuesScreenState extends State<AdminIssuesScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text("Resolve Complaint", style: TextStyle(fontWeight: FontWeight.bold)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text("Resolve Complaint",
+              style: TextStyle(fontWeight: FontWeight.bold)),
           content: TextField(
             controller: feedbackController,
             minLines: 3,
             maxLines: 6,
             decoration: const InputDecoration(
               labelText: "Closing Message / Feedback",
-              hintText: "Example: Issue resolved. Electrician visited and fixed wiring.",
+              hintText:
+                  "Example: Issue resolved. Electrician visited and fixed wiring.",
             ),
           ),
           actions: [
@@ -166,8 +168,17 @@ class _AdminIssuesScreenState extends State<AdminIssuesScreen> {
               )
             : IconButton(
                 icon: const Icon(Icons.menu_rounded),
-                onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer(),
+                onPressed: () =>
+                    adminDashboardScaffoldKey.currentState?.openDrawer(),
               ),
+        actions: [
+          if (Navigator.canPop(context))
+            IconButton(
+              icon: const Icon(Icons.menu_rounded),
+              onPressed: () =>
+                  adminDashboardScaffoldKey.currentState?.openDrawer(),
+            ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(
@@ -175,17 +186,10 @@ class _AdminIssuesScreenState extends State<AdminIssuesScreen> {
             height: 1,
           ),
         ),
-        actions: [
-          if (Navigator.canPop(context))
-            IconButton(
-              icon: const Icon(Icons.menu_rounded),
-              onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer(),
-            ),
-        ],
       ),
-
       body: StreamBuilder<QuerySnapshot>(
-        stream: complaintsRef.orderBy("createdAt", descending: true).snapshots(),
+        stream:
+            complaintsRef.orderBy("createdAt", descending: true).snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -226,7 +230,9 @@ class _AdminIssuesScreenState extends State<AdminIssuesScreen> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
-                  boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)],
+                  boxShadow: const [
+                    BoxShadow(color: Colors.black12, blurRadius: 4)
+                  ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -238,7 +244,8 @@ class _AdminIssuesScreenState extends State<AdminIssuesScreen> {
                         Expanded(
                           child: Text(
                             title,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 16),
                           ),
                         ),
                         Chip(
@@ -254,19 +261,25 @@ class _AdminIssuesScreenState extends State<AdminIssuesScreen> {
                     Text(desc, style: const TextStyle(color: Colors.black87)),
                     const SizedBox(height: 8),
 
-                    Text("Category: $category", style: const TextStyle(color: Colors.grey)),
-                    Text("Date: ${_formatDate(createdAt)}", style: const TextStyle(color: Colors.grey)),
+                    Text("Category: $category",
+                        style: const TextStyle(color: Colors.grey)),
+                    Text("Date: ${_formatDate(createdAt)}",
+                        style: const TextStyle(color: Colors.grey)),
                     const SizedBox(height: 8),
 
                     const Divider(),
 
-                    Text("Resident: $userName", style: const TextStyle(fontWeight: FontWeight.w600)),
-                    Text("Contact: $userPhone", style: const TextStyle(color: Colors.grey)),
+                    Text("Resident: $userName",
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                    Text("Contact: $userPhone",
+                        style: const TextStyle(color: Colors.grey)),
                     const SizedBox(height: 10),
 
                     if (feedback.isNotEmpty) ...[
-                      Text("Admin Feedback:", style: const TextStyle(fontWeight: FontWeight.w600)),
-                      Text(feedback, style: const TextStyle(color: Colors.black87)),
+                      Text("Admin Feedback:",
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                      Text(feedback,
+                          style: const TextStyle(color: Colors.black87)),
                       const SizedBox(height: 10),
                     ],
 
@@ -276,7 +289,8 @@ class _AdminIssuesScreenState extends State<AdminIssuesScreen> {
                       children: [
                         if (status.toLowerCase() != "resolved") ...[
                           TextButton(
-                            onPressed: () => _updateStatus(doc.id, "In Progress"),
+                            onPressed: () =>
+                                _updateStatus(doc.id, "In Progress"),
                             child: const Text("Mark In Progress"),
                           ),
                           const SizedBox(width: 10),
@@ -291,7 +305,9 @@ class _AdminIssuesScreenState extends State<AdminIssuesScreen> {
                         ] else
                           const Text(
                             "Closed",
-                            style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                                color: Colors.green,
+                                fontWeight: FontWeight.bold),
                           )
                       ],
                     )
@@ -305,4 +321,3 @@ class _AdminIssuesScreenState extends State<AdminIssuesScreen> {
     );
   }
 }
-

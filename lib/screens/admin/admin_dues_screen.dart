@@ -39,7 +39,8 @@ class AdminDuesScreen extends StatelessWidget {
               )
             : IconButton(
                 icon: const Icon(Icons.menu_rounded),
-                onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer(),
+                onPressed: () =>
+                    adminDashboardScaffoldKey.currentState?.openDrawer(),
               ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
@@ -52,21 +53,25 @@ class AdminDuesScreen extends StatelessWidget {
           if (Navigator.canPop(context))
             IconButton(
               icon: const Icon(Icons.menu_rounded),
-              onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer(),
+              onPressed: () =>
+                  adminDashboardScaffoldKey.currentState?.openDrawer(),
             ),
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: FilledButton.icon(
               onPressed: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const CreateDemandDueScreen()),
+                MaterialPageRoute(
+                    builder: (_) => const CreateDemandDueScreen()),
               ),
               icon: const Icon(Icons.add_rounded, size: 18),
               label: const Text('New Due'),
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.primary,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               ),
             ),
           ),
@@ -74,9 +79,8 @@ class AdminDuesScreen extends StatelessWidget {
       ),
       body: StreamBuilder<QuerySnapshot>(
         // No orderBy here — sorts client-side to avoid needing a Firestore index
-        stream: FirebaseFirestore.instance
-            .collection('demand_dues')
-            .snapshots(),
+        stream:
+            FirebaseFirestore.instance.collection('demand_dues').snapshots(),
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -90,11 +94,17 @@ class AdminDuesScreen extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.error_outline_rounded, size: 48, color: AppColors.error),
+                    const Icon(Icons.error_outline_rounded,
+                        size: 48, color: AppColors.error),
                     const SizedBox(height: 12),
-                    const Text('Failed to load dues', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const Text('Failed to load dues',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 6),
-                    Text(snap.error.toString(), textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                    Text(snap.error.toString(),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            fontSize: 12, color: AppColors.textSecondary)),
                   ],
                 ),
               ),
@@ -114,8 +124,12 @@ class AdminDuesScreen extends StatelessWidget {
             return 0;
           });
 
-          final active = docs.where((d) => (d.data() as Map)['status'] == 'ACTIVE').toList();
-          final closed = docs.where((d) => (d.data() as Map)['status'] == 'CLOSED').toList();
+          final active = docs
+              .where((d) => (d.data() as Map)['status'] == 'ACTIVE')
+              .toList();
+          final closed = docs
+              .where((d) => (d.data() as Map)['status'] == 'CLOSED')
+              .toList();
 
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -141,9 +155,17 @@ class AdminDuesScreen extends StatelessWidget {
   Widget _sectionHeader(String label, Color color) {
     return Row(
       children: [
-        Container(width: 4, height: 18, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
+        Container(
+            width: 4,
+            height: 18,
+            decoration: BoxDecoration(
+                color: color, borderRadius: BorderRadius.circular(2))),
         const SizedBox(width: 8),
-        Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textPrimary)),
+        Text(label,
+            style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+                color: AppColors.textPrimary)),
       ],
     );
   }
@@ -154,18 +176,31 @@ class AdminDuesScreen extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            width: 80, height: 80,
-            decoration: BoxDecoration(color: AppColors.primaryLight, shape: BoxShape.circle),
-            child: const Icon(Icons.request_quote_outlined, color: AppColors.primary, size: 36),
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+                color: AppColors.primaryLight, shape: BoxShape.circle),
+            child: const Icon(Icons.request_quote_outlined,
+                color: AppColors.primary, size: 36),
           ),
           const SizedBox(height: 16),
-          const Text('No demand dues yet', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textPrimary)),
+          const Text('No demand dues yet',
+              style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: AppColors.textPrimary)),
           const SizedBox(height: 6),
-          const Text('Create one to charge residents\nfor special work or expenses', textAlign: TextAlign.center, style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+          const Text(
+              'Create one to charge residents\nfor special work or expenses',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
           const SizedBox(height: 24),
           AppTheme.gradientButton(
             label: 'Create First Due',
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CreateDemandDueScreen())),
+            onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const CreateDemandDueScreen())),
             height: 48,
             icon: Icons.add_rounded,
           ),
@@ -184,38 +219,50 @@ class _DemandDueCard extends StatelessWidget {
 
   Color _categoryColor(String cat) {
     switch (cat) {
-      case 'Repair':      return const Color(0xFFEF4444);
-      case 'Renovation':  return const Color(0xFF8B5CF6);
-      case 'Event':       return const Color(0xFFF59E0B);
-      case 'Utility':     return const Color(0xFF06B6D4);
-      default:            return AppColors.primary;
+      case 'Repair':
+        return const Color(0xFFEF4444);
+      case 'Renovation':
+        return const Color(0xFF8B5CF6);
+      case 'Event':
+        return const Color(0xFFF59E0B);
+      case 'Utility':
+        return const Color(0xFF06B6D4);
+      default:
+        return AppColors.primary;
     }
   }
 
   IconData _categoryIcon(String cat) {
     switch (cat) {
-      case 'Repair':      return Icons.build_rounded;
-      case 'Renovation':  return Icons.home_repair_service_rounded;
-      case 'Event':       return Icons.celebration_rounded;
-      case 'Utility':     return Icons.bolt_rounded;
-      default:            return Icons.handyman_rounded;
+      case 'Repair':
+        return Icons.build_rounded;
+      case 'Renovation':
+        return Icons.home_repair_service_rounded;
+      case 'Event':
+        return Icons.celebration_rounded;
+      case 'Utility':
+        return Icons.bolt_rounded;
+      default:
+        return Icons.handyman_rounded;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final m       = doc.data() as Map<String, dynamic>;
-    final title   = m['title']?.toString() ?? '-';
-    final desc    = m['description']?.toString() ?? '';
-    final cat     = m['category']?.toString() ?? 'Other';
-    final amount  = (m['amount_per_unit'] as num?)?.toInt() ?? 0;
-    final count   = (m['invoices_created'] as num?)?.toInt() ?? 0;
-    final status  = m['status']?.toString() ?? 'ACTIVE';
+    final m = doc.data() as Map<String, dynamic>;
+    final title = m['title']?.toString() ?? '-';
+    final desc = m['description']?.toString() ?? '';
+    final cat = m['category']?.toString() ?? 'Other';
+    final amount = (m['amount_per_unit'] as num?)?.toInt() ?? 0;
+    final count = (m['invoices_created'] as num?)?.toInt() ?? 0;
+    final status = m['status']?.toString() ?? 'ACTIVE';
     final rawDate = m['due_date'];
     final dueDate = rawDate is Timestamp ? rawDate.toDate() : null;
-    final isOverdue = dueDate != null && dueDate.isBefore(DateTime.now()) && status == 'ACTIVE';
+    final isOverdue = dueDate != null &&
+        dueDate.isBefore(DateTime.now()) &&
+        status == 'ACTIVE';
     final catColor = _categoryColor(cat);
-    final total   = amount * count;
+    final total = amount * count;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -243,10 +290,18 @@ class _DemandDueCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textPrimary)),
+                      Text(title,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                              color: AppColors.textPrimary)),
                       const SizedBox(height: 2),
                       if (desc.isNotEmpty)
-                        Text(desc, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                        Text(desc,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 12, color: AppColors.textSecondary)),
                     ],
                   ),
                 ),
@@ -261,36 +316,47 @@ class _DemandDueCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: AppColors.background,
-              borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(16), bottomRight: Radius.circular(16)),
+              borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(16),
+                  bottomRight: Radius.circular(16)),
             ),
             child: Column(
               children: [
                 Row(
                   children: [
-                    _statTile('₹${NumberFormat('#,##0').format(amount)}', 'Per Flat', catColor),
+                    _statTile('₹${NumberFormat('#,##0').format(amount)}',
+                        'Per Flat', catColor),
                     _divider(),
                     _statTile('$count', 'Flats', AppColors.textSecondary),
                     _divider(),
-                    _statTile('₹${NumberFormat('#,##0').format(total)}', 'Total', AppColors.textPrimary),
+                    _statTile('₹${NumberFormat('#,##0').format(total)}',
+                        'Total', AppColors.textPrimary),
                   ],
                 ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
                     Icon(
-                      isOverdue ? Icons.warning_amber_rounded : Icons.calendar_today_rounded,
+                      isOverdue
+                          ? Icons.warning_amber_rounded
+                          : Icons.calendar_today_rounded,
                       size: 14,
-                      color: isOverdue ? AppColors.error : AppColors.textSecondary,
+                      color:
+                          isOverdue ? AppColors.error : AppColors.textSecondary,
                     ),
                     const SizedBox(width: 6),
                     Text(
                       dueDate != null
-                          ? (isOverdue ? 'Overdue — ' : 'Due by ') + DateFormat('dd MMM yyyy').format(dueDate)
+                          ? (isOverdue ? 'Overdue — ' : 'Due by ') +
+                              DateFormat('dd MMM yyyy').format(dueDate)
                           : 'No due date',
                       style: TextStyle(
                         fontSize: 12,
-                        color: isOverdue ? AppColors.error : AppColors.textSecondary,
-                        fontWeight: isOverdue ? FontWeight.bold : FontWeight.normal,
+                        color: isOverdue
+                            ? AppColors.error
+                            : AppColors.textSecondary,
+                        fontWeight:
+                            isOverdue ? FontWeight.bold : FontWeight.normal,
                       ),
                     ),
                     const Spacer(),
@@ -303,16 +369,22 @@ class _DemandDueCard extends StatelessWidget {
                       builder: (ctx, invSnap) {
                         if (!invSnap.hasData) return const SizedBox.shrink();
                         final invDocs = invSnap.data!.docs;
-                        final paid = invDocs.where((d) => (d.data() as Map)['status'] == 'PAID').length;
+                        final paid = invDocs
+                            .where((d) => (d.data() as Map)['status'] == 'PAID')
+                            .length;
                         return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
                             color: AppColors.successLight,
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
                             '$paid/${invDocs.length} paid',
-                            style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.bold, fontSize: 12),
+                            style: const TextStyle(
+                                color: AppColors.success,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12),
                           ),
                         );
                       },
@@ -331,7 +403,8 @@ class _DemandDueCard extends StatelessWidget {
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppColors.primary,
                             side: const BorderSide(color: AppColors.border),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8)),
                             padding: const EdgeInsets.symmetric(vertical: 10),
                           ),
                         ),
@@ -343,9 +416,12 @@ class _DemandDueCard extends StatelessWidget {
                         label: const Text('Close'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.error,
-                          side: BorderSide(color: AppColors.error.withOpacity(0.4)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          side: BorderSide(
+                              color: AppColors.error.withOpacity(0.4)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 10),
                         ),
                       ),
                     ],
@@ -360,7 +436,8 @@ class _DemandDueCard extends StatelessWidget {
   }
 
   Widget _statusBadge(String status) {
-    final color = status == 'ACTIVE' ? AppColors.success : AppColors.textSecondary;
+    final color =
+        status == 'ACTIVE' ? AppColors.success : AppColors.textSecondary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
@@ -368,7 +445,9 @@ class _DemandDueCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: color.withOpacity(0.3)),
       ),
-      child: Text(status, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 11)),
+      child: Text(status,
+          style: TextStyle(
+              color: color, fontWeight: FontWeight.bold, fontSize: 11)),
     );
   }
 
@@ -376,8 +455,12 @@ class _DemandDueCard extends StatelessWidget {
     return Expanded(
       child: Column(
         children: [
-          Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: color)),
-          Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+          Text(value,
+              style: TextStyle(
+                  fontWeight: FontWeight.bold, fontSize: 15, color: color)),
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 11, color: AppColors.textSecondary)),
         ],
       ),
     );
@@ -390,7 +473,9 @@ class _DemandDueCard extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _DemandDueDetailSheet(demandId: doc.id, title: (doc.data() as Map)['title']?.toString() ?? ''),
+      builder: (_) => _DemandDueDetailSheet(
+          demandId: doc.id,
+          title: (doc.data() as Map)['title']?.toString() ?? ''),
     );
   }
 
@@ -399,10 +484,14 @@ class _DemandDueCard extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Close Demand Due', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: const Text('No more payments will be accepted. This cannot be undone.'),
+        title: const Text('Close Demand Due',
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        content: const Text(
+            'No more payments will be accepted. This cannot be undone.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(backgroundColor: AppColors.error),
@@ -414,7 +503,7 @@ class _DemandDueCard extends StatelessWidget {
     if (ok != true || !context.mounted) return;
 
     try {
-      final user  = FirebaseAuth.instance.currentUser;
+      final user = FirebaseAuth.instance.currentUser;
       final token = await user?.getIdToken(true);
       await http.post(
         Uri.parse('$base/closeDemandDueHttp'),
@@ -432,7 +521,9 @@ class _DemandDueCard extends StatelessWidget {
         ));
       }
     } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (context.mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 }
@@ -457,15 +548,25 @@ class _DemandDueDetailSheet extends StatelessWidget {
         child: Column(
           children: [
             const SizedBox(height: 12),
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2))),
+            Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2))),
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Row(
                 children: [
-                  const Icon(Icons.list_alt_rounded, color: AppColors.primary, size: 20),
+                  const Icon(Icons.list_alt_rounded,
+                      color: AppColors.primary, size: 20),
                   const SizedBox(width: 8),
-                  Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16), overflow: TextOverflow.ellipsis)),
+                  Expanded(
+                      child: Text(title,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 16),
+                          overflow: TextOverflow.ellipsis)),
                 ],
               ),
             ),
@@ -479,37 +580,51 @@ class _DemandDueDetailSheet extends StatelessWidget {
                     .where('demand_id', isEqualTo: demandId)
                     .snapshots(),
                 builder: (ctx, snap) {
-                  if (snap.hasError) return Center(child: Text('Error: ${snap.error}', style: const TextStyle(color: AppColors.error)));
-                  if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+                  if (snap.hasError)
+                    return Center(
+                        child: Text('Error: ${snap.error}',
+                            style: const TextStyle(color: AppColors.error)));
+                  if (!snap.hasData)
+                    return const Center(child: CircularProgressIndicator());
                   // Sort by house_no client-side
-                  final docs = [...snap.data!.docs]
-                    ..sort((a, b) {
-                      final ha = (a.data() as Map)['house_no']?.toString() ?? '';
-                      final hb = (b.data() as Map)['house_no']?.toString() ?? '';
+                  final docs = [...snap.data!.docs]..sort((a, b) {
+                      final ha =
+                          (a.data() as Map)['house_no']?.toString() ?? '';
+                      final hb =
+                          (b.data() as Map)['house_no']?.toString() ?? '';
                       return ha.compareTo(hb);
                     });
-                  if (docs.isEmpty) return const Center(child: Text('No invoices found.'));
+                  if (docs.isEmpty)
+                    return const Center(child: Text('No invoices found.'));
 
                   return ListView.separated(
                     controller: controller,
                     padding: const EdgeInsets.all(16),
                     itemCount: docs.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1, color: AppColors.divider),
+                    separatorBuilder: (_, __) =>
+                        const Divider(height: 1, color: AppColors.divider),
                     itemBuilder: (ctx, i) {
                       final inv = docs[i].data() as Map<String, dynamic>;
-                      final status    = inv['status']?.toString() ?? 'UNPAID';
-                      final name      = inv['name']?.toString() ?? '-';
-                      final house     = inv['house_no']?.toString() ?? '-';
-                      final amount    = (inv['amount'] as num?)?.toInt() ?? 0;
-                      final paid      = (inv['paid_amount'] as num?)?.toInt() ?? 0;
+                      final status = inv['status']?.toString() ?? 'UNPAID';
+                      final name = inv['name']?.toString() ?? '-';
+                      final house = inv['house_no']?.toString() ?? '-';
+                      final amount = (inv['amount'] as num?)?.toInt() ?? 0;
+                      final paid = (inv['paid_amount'] as num?)?.toInt() ?? 0;
                       final remaining = amount - paid;
 
                       Color statusColor;
                       switch (status) {
-                        case 'PAID':      statusColor = AppColors.success; break;
-                        case 'PARTIAL':   statusColor = AppColors.warning; break;
-                        case 'SUBMITTED': statusColor = AppColors.primary; break;
-                        default:          statusColor = AppColors.error;
+                        case 'PAID':
+                          statusColor = AppColors.success;
+                          break;
+                        case 'PARTIAL':
+                          statusColor = AppColors.warning;
+                          break;
+                        case 'SUBMITTED':
+                          statusColor = AppColors.primary;
+                          break;
+                        default:
+                          statusColor = AppColors.error;
                       }
 
                       return Padding(
@@ -517,19 +632,34 @@ class _DemandDueDetailSheet extends StatelessWidget {
                         child: Row(
                           children: [
                             Container(
-                              width: 36, height: 36,
-                              decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                              child: Center(child: Text(house, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: statusColor))),
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                  color: statusColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8)),
+                              child: Center(
+                                  child: Text(house,
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 11,
+                                          color: statusColor))),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                  Text(name,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 13)),
                                   Text(
-                                    status == 'PAID' ? 'Fully paid ₹$amount' : 'Remaining ₹$remaining of ₹$amount',
-                                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                                    status == 'PAID'
+                                        ? 'Fully paid ₹$amount'
+                                        : 'Remaining ₹$remaining of ₹$amount',
+                                    style: const TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.textSecondary),
                                   ),
                                 ],
                               ),

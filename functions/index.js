@@ -261,6 +261,16 @@ async function getPendingInvoicesForPayment(tx, db, pay, residentDocId) {
   const houseNo = String(pay.house_no || "");
   const explicitInvoiceId = String(pay.invoice_id || "");
 
+  if (explicitInvoiceId) {
+    const invoiceSnap = await tx.get(db.collection("invoices").doc(explicitInvoiceId));
+    if (invoiceSnap.exists) {
+      const status = String(invoiceSnap.data().status || "");
+      if (status === "UNPAID" || status === "PARTIAL" || status === "SUBMITTED") {
+        return [invoiceSnap];
+      }
+    }
+  }
+
   const byResidentDoc = await tx.get(
     db.collection("invoices")
       .where("uid", "==", residentDocId)
@@ -300,16 +310,6 @@ async function getPendingInvoicesForPayment(tx, db, pay, residentDocId) {
     }
   }
 
-  if (explicitInvoiceId) {
-    const invoiceSnap = await tx.get(db.collection("invoices").doc(explicitInvoiceId));
-    if (invoiceSnap.exists) {
-      const status = String(invoiceSnap.data().status || "");
-      if (status === "UNPAID" || status === "PARTIAL") {
-        return [invoiceSnap];
-      }
-    }
-  }
-
   return [];
 }
 
@@ -342,9 +342,18 @@ async function verifyPaymentInternal(db, adminAuthUid, paymentDocId) {
     const houseNo = String(user.house_no || pay.house_no || "");
 
     const pendingInvoices = await getPendingInvoicesForPayment(tx, db, pay, userRef.id);
+    const explicitInvoiceId = String(pay.invoice_id || "");
 
     let remaining = amount;
     const allocation = {};
+    let receiptDueMeta = {
+      invoice_id: explicitInvoiceId,
+      purpose: String(pay.purpose || ""),
+      invoice_type: String(pay.invoice_type || ""),
+      description: "",
+      month: "",
+      due_date: null,
+    };
 
     for (const doc of pendingInvoices) {
       if (remaining <= 0) break;
@@ -359,10 +368,23 @@ async function verifyPaymentInternal(db, adminAuthUid, paymentDocId) {
       const newStatus = invoiceStatus(invAmt, newPaid);
 
       allocation[doc.id] = payHere;
+      if (!receiptDueMeta.invoice_id || doc.id === explicitInvoiceId) {
+        const invType = String(inv.type || pay.invoice_type || "MAINTENANCE");
+        receiptDueMeta = {
+          invoice_id: doc.id,
+          purpose: String(pay.purpose || inv.title || (invType === "DEMAND" ? "Special Due" : "Monthly Maintenance")),
+          invoice_type: invType,
+          description: String(inv.description || ""),
+          month: String(inv.month || ""),
+          due_date: inv.due_date || null,
+        };
+      }
 
       tx.update(doc.ref, {
         paid_amount: newPaid,
         status: newStatus,
+        submitted_payment_id: admin.firestore.FieldValue.delete(),
+        submitted_at: admin.firestore.FieldValue.delete(),
         updated_at: admin.firestore.FieldValue.serverTimestamp(),
       });
 
@@ -398,6 +420,11 @@ async function verifyPaymentInternal(db, adminAuthUid, paymentDocId) {
         receipt_type: "FINAL",
         status: "VERIFIED",
         allocation,
+        ...receiptDueMeta,
+        method: String(pay.method || ""),
+        utr: String(pay.utr || ""),
+        cash_handed_to: String(pay.cash_handed_to || ""),
+        name: String(user.name || user.username || ""),
         updated_at: admin.firestore.FieldValue.serverTimestamp(),
       }, { merge: true });
     } else {
@@ -408,9 +435,13 @@ async function verifyPaymentInternal(db, adminAuthUid, paymentDocId) {
         payment_id: paymentDocId,
         amount: allocatedTotal,
         utr: String(pay.utr || ""),
+        method: String(pay.method || ""),
+        cash_handed_to: String(pay.cash_handed_to || ""),
         receipt_type: "FINAL",
         status: "VERIFIED",
         allocation,
+        ...receiptDueMeta,
+        name: String(user.name || user.username || ""),
         admin_note: "",
         created_at: admin.firestore.FieldValue.serverTimestamp(),
         updated_at: admin.firestore.FieldValue.serverTimestamp(),
@@ -428,6 +459,26 @@ function invoiceStatus(amount, paid) {
   if (paid <= 0) return "UNPAID";
   if (paid >= amount) return "PAID";
   return "PARTIAL";
+}
+
+async function reopenSubmittedInvoiceForRejectedPayment(tx, db, pay) {
+  const invoiceId = String(pay.invoice_id || "");
+  if (!invoiceId) return;
+
+  const invoiceRef = db.collection("invoices").doc(invoiceId);
+  const invoiceSnap = await tx.get(invoiceRef);
+  if (!invoiceSnap.exists) return;
+
+  const invoice = invoiceSnap.data();
+  const amount = Number(invoice.amount || 0);
+  const paid = Number(invoice.paid_amount || 0);
+
+  tx.set(invoiceRef, {
+    status: invoiceStatus(amount, paid),
+    submitted_payment_id: admin.firestore.FieldValue.delete(),
+    submitted_at: admin.firestore.FieldValue.delete(),
+    updated_at: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
 }
 
 /**
@@ -561,6 +612,7 @@ exports.rejectPaymentManualHttp = onRequest({ cors: true }, async (req, res) => 
         throw new HttpsError("failed-precondition", `Payment not SUBMITTED (is ${pay.status}).`);
       }
       residentUid = String(pay.uid || ""); // capture for FCM after transaction
+      await reopenSubmittedInvoiceForRejectedPayment(tx, db, pay);
       tx.set(paymentRef, {
         status: "REJECTED",
         admin_note: reason,
@@ -684,6 +736,7 @@ exports.rejectPaymentManual = onCall({ enforceAppCheck: false }, async (request)
       throw new HttpsError("failed-precondition", `Payment not SUBMITTED (is ${pay.status}).`);
     }
 
+    await reopenSubmittedInvoiceForRejectedPayment(tx, db, pay);
     tx.set(paymentRef, {
       status: "REJECTED",
       admin_note: reason,

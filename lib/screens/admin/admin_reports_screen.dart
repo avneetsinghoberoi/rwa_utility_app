@@ -46,7 +46,8 @@ class _ReportData {
   });
 
   double get netBalance => totalCollected - totalExpenses;
-  int get totalComplaints => openComplaints + inProgressComplaints + resolvedComplaints;
+  int get totalComplaints =>
+      openComplaints + inProgressComplaints + resolvedComplaints;
 }
 
 // ── Filter enum ───────────────────────────────────────────────────────────────
@@ -158,7 +159,9 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
       final status = (data['status'] ?? '').toString().toLowerCase();
       if (status == 'open' || status == 'pending') {
         openC++;
-      } else if (status == 'in_progress' || status == 'inprogress' || status == 'in progress') {
+      } else if (status == 'in_progress' ||
+          status == 'inprogress' ||
+          status == 'in progress') {
         inProgressC++;
       } else {
         resolvedC++;
@@ -217,7 +220,8 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
       case _Filter.thisMonth:
         return DateFormat('MMMM yyyy').format(now);
       case _Filter.lastMonth:
-        return DateFormat('MMMM yyyy').format(DateTime(now.year, now.month - 1));
+        return DateFormat('MMMM yyyy')
+            .format(DateTime(now.year, now.month - 1));
       case _Filter.allTime:
         return 'All Time';
     }
@@ -297,8 +301,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                 size: 48, color: AppColors.error),
             const SizedBox(height: 12),
             const Text('Failed to load reports',
-                style:
-                    TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 6),
             Text(error,
                 textAlign: TextAlign.center,
@@ -325,8 +328,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
         const SizedBox(height: 20),
 
         // ── Finance section ──────────────────────────────────────────
-        _sectionHeader(
-            Icons.account_balance_wallet_rounded, 'Finance Overview',
+        _sectionHeader(Icons.account_balance_wallet_rounded, 'Finance Overview',
             subtitle: _filterLabel),
         const SizedBox(height: 12),
         _financeCards(data),
@@ -338,8 +340,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
 
         // ── Complaints section ───────────────────────────────────────
         const SizedBox(height: 8),
-        _sectionHeader(
-            Icons.report_problem_rounded, 'Complaints & Issues',
+        _sectionHeader(Icons.report_problem_rounded, 'Complaints & Issues',
             subtitle: '${data.totalComplaints} total'),
         const SizedBox(height: 12),
         _complaintCards(data),
@@ -522,17 +523,15 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                 d.netBalance >= 0
                     ? Icons.trending_up_rounded
                     : Icons.trending_down_rounded,
-                color:
-                    d.netBalance >= 0 ? AppColors.success : AppColors.error,
+                color: d.netBalance >= 0 ? AppColors.success : AppColors.error,
                 size: 22,
               ),
               const SizedBox(width: 10),
               Text(
                 'Net Balance',
                 style: TextStyle(
-                    color: d.netBalance >= 0
-                        ? AppColors.success
-                        : AppColors.error,
+                    color:
+                        d.netBalance >= 0 ? AppColors.success : AppColors.error,
                     fontWeight: FontWeight.w600,
                     fontSize: 14),
               ),
@@ -540,9 +539,8 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
               Text(
                 _fmt(d.netBalance.abs()),
                 style: TextStyle(
-                    color: d.netBalance >= 0
-                        ? AppColors.success
-                        : AppColors.error,
+                    color:
+                        d.netBalance >= 0 ? AppColors.success : AppColors.error,
                     fontWeight: FontWeight.w800,
                     fontSize: 16),
               ),
@@ -550,9 +548,8 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
               Text(
                 d.netBalance >= 0 ? 'surplus' : 'deficit',
                 style: TextStyle(
-                    color: d.netBalance >= 0
-                        ? AppColors.success
-                        : AppColors.error,
+                    color:
+                        d.netBalance >= 0 ? AppColors.success : AppColors.error,
                     fontSize: 12),
               ),
             ],
@@ -569,9 +566,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
         const SizedBox(height: 4),
         Text(value,
             style: TextStyle(
-                color: color,
-                fontWeight: FontWeight.w700,
-                fontSize: 13)),
+                color: color, fontWeight: FontWeight.w700, fontSize: 13)),
         Text(label,
             style: const TextStyle(color: Colors.white60, fontSize: 11)),
       ],
@@ -625,8 +620,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                   if (unpaidFraction > 0)
                     Flexible(
                       flex: (unpaidFraction * 100).round(),
-                      child:
-                          Container(color: AppColors.error.withOpacity(0.6)),
+                      child: Container(color: AppColors.error.withOpacity(0.6)),
                     ),
                 ],
               ),
@@ -651,7 +645,8 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     return Row(
       children: [
         Container(
-            width: 10, height: 10,
+            width: 10,
+            height: 10,
             decoration: BoxDecoration(
                 color: color, borderRadius: BorderRadius.circular(2))),
         const SizedBox(width: 6),
@@ -734,17 +729,21 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
           ...complaints.asMap().entries.map((e) {
             final i = e.key;
             final c = e.value;
-            final title = (c['title'] ?? c['subject'] ?? c['description'] ?? 'Complaint').toString();
+            final title =
+                (c['title'] ?? c['subject'] ?? c['description'] ?? 'Complaint')
+                    .toString();
             final status = (c['status'] ?? '').toString();
             final ts = c['created_at'];
-            final date = ts is Timestamp
-                ? DateFormat('dd MMM').format(ts.toDate())
-                : '';
-            final name = (c['resident_name'] ?? c['name'] ?? c['user_name'] ?? '').toString();
+            final date =
+                ts is Timestamp ? DateFormat('dd MMM').format(ts.toDate()) : '';
+            final name =
+                (c['resident_name'] ?? c['name'] ?? c['user_name'] ?? '')
+                    .toString();
 
             Color statusColor;
             String statusLabel;
-            if (status.toLowerCase() == 'open' || status.toLowerCase() == 'pending') {
+            if (status.toLowerCase() == 'open' ||
+                status.toLowerCase() == 'pending') {
               statusColor = AppColors.error;
               statusLabel = 'Open';
             } else if (status.toLowerCase().contains('progress')) {
@@ -812,8 +811,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                               padding: const EdgeInsets.only(top: 2),
                               child: Text(date,
                                   style: const TextStyle(
-                                      fontSize: 10,
-                                      color: AppColors.textHint)),
+                                      fontSize: 10, color: AppColors.textHint)),
                             ),
                         ],
                       ),

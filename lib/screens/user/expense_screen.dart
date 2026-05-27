@@ -40,19 +40,25 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     if (l.contains('electric') || l.contains('power')) return AppColors.warning;
     if (l.contains('water')) return const Color(0xFF06B6D4);
     if (l.contains('clean') || l.contains('sweep')) return AppColors.success;
-    if (l.contains('security') || l.contains('guard')) return const Color(0xFF8B5CF6);
+    if (l.contains('security') || l.contains('guard'))
+      return const Color(0xFF8B5CF6);
     if (l.contains('repair') || l.contains('maintain')) return AppColors.error;
     return AppColors.textSecondary;
   }
 
   IconData _categoryIcon(String label) {
     final l = label.toLowerCase();
-    if (l.contains('salary') || l.contains('staff')) return Icons.people_rounded;
-    if (l.contains('electric') || l.contains('power')) return Icons.bolt_rounded;
+    if (l.contains('salary') || l.contains('staff'))
+      return Icons.people_rounded;
+    if (l.contains('electric') || l.contains('power'))
+      return Icons.bolt_rounded;
     if (l.contains('water')) return Icons.water_drop_rounded;
-    if (l.contains('clean') || l.contains('sweep')) return Icons.cleaning_services_rounded;
-    if (l.contains('security') || l.contains('guard')) return Icons.security_rounded;
-    if (l.contains('repair') || l.contains('maintain')) return Icons.build_rounded;
+    if (l.contains('clean') || l.contains('sweep'))
+      return Icons.cleaning_services_rounded;
+    if (l.contains('security') || l.contains('guard'))
+      return Icons.security_rounded;
+    if (l.contains('repair') || l.contains('maintain'))
+      return Icons.build_rounded;
     return Icons.receipt_long_rounded;
   }
 
@@ -82,7 +88,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               )
             : IconButton(
                 icon: const Icon(Icons.menu_rounded),
-                onPressed: () => dashboardScaffoldKey.currentState?.openDrawer(),
+                onPressed: () =>
+                    dashboardScaffoldKey.currentState?.openDrawer(),
               ),
         actions: [
           if (Navigator.canPop(context))
@@ -113,9 +120,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 if (!snap.hasData) return const SizedBox(height: 52);
 
                 final months = snap.data!.docs
-                    .map((d) =>
-                        (d.data() as Map<String, dynamic>)['monthKey']
-                            ?.toString())
+                    .map((d) => (d.data() as Map<String, dynamic>)['monthKey']
+                        ?.toString())
                     .whereType<String>()
                     .toSet()
                     .toList()
@@ -133,8 +139,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                         color: AppColors.primary, size: 20),
                     filled: true,
                     fillColor: AppColors.primaryLight,
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 12),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: const BorderSide(color: AppColors.border),
@@ -230,8 +236,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                               color: Colors.white.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Icon(Icons.account_balance_wallet_rounded,
-                                color: Colors.white, size: 24),
+                            child: const Icon(
+                                Icons.account_balance_wallet_rounded,
+                                color: Colors.white,
+                                size: 24),
                           ),
                           const SizedBox(width: 14),
                           Column(

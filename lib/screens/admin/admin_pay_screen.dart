@@ -28,6 +28,25 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
   String? _loadingPaymentId;
   bool _generatingDues = false;
 
+  Future<String> _getAdminAuthToken(User? user) async {
+    if (user == null) {
+      throw Exception('Admin session expired. Please log in again.');
+    }
+
+    try {
+      final token = await user.getIdToken();
+      if (token != null && token.isNotEmpty) return token;
+    } catch (e) {
+      debugPrint('⚠️ Cached admin token unavailable: $e');
+    }
+
+    final refreshedToken = await user.getIdToken(true);
+    if (refreshedToken == null || refreshedToken.isEmpty) {
+      throw Exception('Could not get admin auth token. Please log in again.');
+    }
+    return refreshedToken;
+  }
+
   // ── Current month helpers ────────────────────────────────────────
   String get _currentMonthKey {
     final now = DateTime.now();
@@ -42,17 +61,18 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
     setState(() => _loadingPaymentId = paymentId);
     try {
       final currentUser = FirebaseAuth.instance.currentUser;
-      debugPrint('🔑 Calling verifyPaymentManual as uid=${currentUser?.uid}, email=${currentUser?.email}');
-      final authToken = await currentUser?.getIdToken(true);
+      debugPrint(
+          '🔑 Calling verifyPaymentManual as uid=${currentUser?.uid}, email=${currentUser?.email}');
+      final authToken = await _getAdminAuthToken(currentUser);
       final response = await http.post(
         Uri.parse(_verifyPaymentHttpUrl),
         headers: {
           'Content-Type': 'application/json',
-          if (authToken != null) 'Authorization': 'Bearer $authToken',
+          'Authorization': 'Bearer $authToken',
         },
         body: jsonEncode({
           'paymentDocId': paymentId,
-          if (authToken != null) 'authToken': authToken,
+          'authToken': authToken,
         }),
       );
 
@@ -92,8 +112,7 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Row(
           children: [
             Icon(Icons.cancel_outlined, color: AppColors.error, size: 22),
@@ -108,8 +127,7 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
           children: [
             const Text(
               'Please provide a reason. The resident will see this.',
-              style: TextStyle(
-                  color: AppColors.textSecondary, fontSize: 13),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
             ),
             const SizedBox(height: 14),
             TextField(
@@ -154,17 +172,18 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
     setState(() => _loadingPaymentId = paymentId);
     try {
       final user = FirebaseAuth.instance.currentUser;
-      final authToken = await user?.getIdToken(true);
+      final authToken = await _getAdminAuthToken(user);
       debugPrint('🔑 Calling rejectPaymentManualHttp as uid=${user?.uid}');
       final response = await http.post(
         Uri.parse(_rejectPaymentHttpUrl),
         headers: {
           'Content-Type': 'application/json',
-          if (authToken != null) 'Authorization': 'Bearer $authToken',
+          'Authorization': 'Bearer $authToken',
         },
         body: jsonEncode({
           'paymentDocId': paymentId,
           'reason': reason,
+          'authToken': authToken,
         }),
       );
 
@@ -197,8 +216,7 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Generate Monthly Dues',
             style: TextStyle(fontWeight: FontWeight.bold)),
         content: Text(
@@ -206,8 +224,7 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
           '$_currentMonthLabel.\n\n'
           'The system does this automatically on the 1st of each month. '
           'Only proceed if the automatic run was missed.',
-          style: const TextStyle(
-              color: AppColors.textSecondary, fontSize: 13),
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
         ),
         actions: [
           TextButton(
@@ -232,15 +249,15 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
     setState(() => _generatingDues = true);
     try {
       final user = FirebaseAuth.instance.currentUser;
-      final authToken = await user?.getIdToken(true);
+      final authToken = await _getAdminAuthToken(user);
       debugPrint('🔑 Calling generateInvoicesManualHttp as uid=${user?.uid}');
       final response = await http.post(
         Uri.parse(_generateInvoicesHttpUrl),
         headers: {
           'Content-Type': 'application/json',
-          if (authToken != null) 'Authorization': 'Bearer $authToken',
+          'Authorization': 'Bearer $authToken',
         },
-        body: jsonEncode({'month': _currentMonthKey}),
+        body: jsonEncode({'month': _currentMonthKey, 'authToken': authToken}),
       );
 
       final responseBody = response.body.isEmpty
@@ -256,7 +273,8 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
       }
 
       debugPrint('✅ generateInvoicesManualHttp success: $responseBody');
-      final data = (responseBody['result'] ?? responseBody) as Map<String, dynamic>;
+      final data =
+          (responseBody['result'] ?? responseBody) as Map<String, dynamic>;
 
       if (!mounted) return;
       if (data['skipped'] == true) {
@@ -282,8 +300,7 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
         content: Text(msg),
         backgroundColor: isSuccess ? AppColors.success : AppColors.error,
         behavior: SnackBarBehavior.floating,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
@@ -312,7 +329,8 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
               )
             : IconButton(
                 icon: const Icon(Icons.menu_rounded),
-                onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer(),
+                onPressed: () =>
+                    adminDashboardScaffoldKey.currentState?.openDrawer(),
               ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
@@ -325,7 +343,8 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
           if (Navigator.canPop(context))
             IconButton(
               icon: const Icon(Icons.menu_rounded),
-              onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer(),
+              onPressed: () =>
+                  adminDashboardScaffoldKey.currentState?.openDrawer(),
             ),
           // Manual "Generate dues" button
           _generatingDues
@@ -378,12 +397,13 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
               // ── Summary chips ─────────────────────────────────
               Row(
                 children: [
-                  _summaryChip('${pending.length} Pending',
-                      AppColors.warning, AppColors.warningLight,
-                      Icons.hourglass_empty_rounded),
+                  _summaryChip('${pending.length} Pending', AppColors.warning,
+                      AppColors.warningLight, Icons.hourglass_empty_rounded),
                   const SizedBox(width: 10),
-                  _summaryChip('${processed.length} Processed',
-                      AppColors.success, AppColors.successLight,
+                  _summaryChip(
+                      '${processed.length} Processed',
+                      AppColors.success,
+                      AppColors.successLight,
                       Icons.check_circle_rounded),
                 ],
               ),
@@ -393,8 +413,8 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
               if (pending.isNotEmpty) ...[
                 _sectionHeader('Pending Verification', AppColors.warning),
                 const SizedBox(height: 10),
-                ...pending.map((d) =>
-                    _paymentCard(context, d, isPending: true)),
+                ...pending
+                    .map((d) => _paymentCard(context, d, isPending: true)),
                 const SizedBox(height: 20),
               ],
 
@@ -402,8 +422,8 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
               if (processed.isNotEmpty) ...[
                 _sectionHeader('Processed', AppColors.textSecondary),
                 const SizedBox(height: 10),
-                ...processed.map((d) =>
-                    _paymentCard(context, d, isPending: false)),
+                ...processed
+                    .map((d) => _paymentCard(context, d, isPending: false)),
               ],
             ],
           );
@@ -454,8 +474,10 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
         int unpaid = 0, submitted = 0, paid = 0;
         for (final d in docs) {
           final s = (d.data() as Map<String, dynamic>)['status'] ?? '';
-          if (s == 'UNPAID') unpaid++;
-          else if (s == 'SUBMITTED') submitted++;
+          if (s == 'UNPAID')
+            unpaid++;
+          else if (s == 'SUBMITTED')
+            submitted++;
           else if (s == 'PAID') paid++;
         }
         final total = docs.length;
@@ -493,14 +515,12 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
                 children: [
                   _overviewTile('$total', 'Total', Colors.white),
                   _overviewDivider(),
-                  _overviewTile('$paid', 'Paid',
-                      Colors.greenAccent.shade200),
+                  _overviewTile('$paid', 'Paid', Colors.greenAccent.shade200),
                   _overviewDivider(),
-                  _overviewTile('$submitted', 'Review',
-                      Colors.amberAccent.shade200),
+                  _overviewTile(
+                      '$submitted', 'Review', Colors.amberAccent.shade200),
                   _overviewDivider(),
-                  _overviewTile('$unpaid', 'Unpaid',
-                      Colors.redAccent.shade200),
+                  _overviewTile('$unpaid', 'Unpaid', Colors.redAccent.shade200),
                 ],
               ),
               const SizedBox(height: 12),
@@ -510,8 +530,8 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
                 child: LinearProgressIndicator(
                   value: total > 0 ? paid / total : 0,
                   backgroundColor: Colors.white.withOpacity(0.25),
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                      Colors.greenAccent),
+                  valueColor:
+                      const AlwaysStoppedAnimation<Color>(Colors.greenAccent),
                   minHeight: 6,
                 ),
               ),
@@ -534,9 +554,7 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
         children: [
           Text(count,
               style: TextStyle(
-                  color: color,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold)),
+                  color: color, fontSize: 22, fontWeight: FontWeight.bold)),
           Text(label,
               style: TextStyle(
                   color: Colors.white.withOpacity(0.75), fontSize: 11)),
@@ -561,6 +579,7 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
     final amt = (m['amount'] ?? 0).toString();
     final txn = (m['utr'] ?? '-').toString();
     final methodStr = (m['method'] ?? '-').toString();
+    final cashHandedTo = (m['cash_handed_to'] ?? '').toString().trim();
     final proofUrl = (m['proof_url'] ?? '').toString();
     final note = (m['note'] ?? '').toString().trim();
     final purpose = (m['purpose'] ?? '').toString().trim();
@@ -619,18 +638,25 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: isDemand ? const Color(0xFFF3E8FF) : AppColors.primaryLight,
+                    color: isDemand
+                        ? const Color(0xFFF3E8FF)
+                        : AppColors.primaryLight,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        isDemand ? Icons.request_quote_rounded : Icons.receipt_long_rounded,
+                        isDemand
+                            ? Icons.request_quote_rounded
+                            : Icons.receipt_long_rounded,
                         size: 13,
-                        color: isDemand ? const Color(0xFF8B5CF6) : AppColors.primary,
+                        color: isDemand
+                            ? const Color(0xFF8B5CF6)
+                            : AppColors.primary,
                       ),
                       const SizedBox(width: 5),
                       Text(
@@ -639,7 +665,9 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
                             : 'Monthly Maintenance',
                         style: TextStyle(
                           fontSize: 11,
-                          color: isDemand ? const Color(0xFF8B5CF6) : AppColors.primary,
+                          color: isDemand
+                              ? const Color(0xFF8B5CF6)
+                              : AppColors.primary,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -659,13 +687,20 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.tag_rounded,
-                      size: 14, color: AppColors.textSecondary),
+                  Icon(
+                    methodStr == 'CASH'
+                        ? Icons.person_outline_rounded
+                        : Icons.tag_rounded,
+                    size: 14,
+                    color: AppColors.textSecondary,
+                  ),
                   const SizedBox(width: 6),
-                  Text('UTR / Txn ID: $txn',
+                  Text(
+                      methodStr == 'CASH'
+                          ? 'Cash handed over to: ${cashHandedTo.isNotEmpty ? cashHandedTo : txn}'
+                          : 'UTR / Txn ID: $txn',
                       style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary)),
+                          fontSize: 12, color: AppColors.textSecondary)),
                 ],
               ),
             ),
@@ -682,8 +717,7 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
                   Expanded(
                     child: Text(note,
                         style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary)),
+                            fontSize: 12, color: AppColors.textSecondary)),
                   ),
                 ],
               ),
@@ -695,9 +729,7 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
               ClipRRect(
                 borderRadius: BorderRadius.circular(10),
                 child: Image.network(proofUrl,
-                    height: 180,
-                    fit: BoxFit.cover,
-                    width: double.infinity),
+                    height: 180, fit: BoxFit.cover, width: double.infinity),
               ),
             ],
 
@@ -790,8 +822,7 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
   Widget _summaryChip(String label, Color color, Color bg, IconData icon) {
     return Expanded(
       child: Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(12),
@@ -803,9 +834,7 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
             const SizedBox(width: 8),
             Text(label,
                 style: TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13)),
+                    color: color, fontWeight: FontWeight.w600, fontSize: 13)),
           ],
         ),
       ),
@@ -840,8 +869,7 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
               size: 64, color: AppColors.textHint),
           const SizedBox(height: 12),
           const Text('No payment requests yet.',
-              style:
-                  TextStyle(color: AppColors.textSecondary, fontSize: 15)),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 15)),
           const SizedBox(height: 20),
           ElevatedButton.icon(
             onPressed: _generateDues,
@@ -852,8 +880,7 @@ class _AdminPayScreenState extends State<AdminPayScreen> {
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 20, vertical: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             ),
           ),
         ],

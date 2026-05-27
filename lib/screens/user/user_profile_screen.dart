@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:gate_basic/theme/app_theme.dart';
-import '../../utils/dashboard_key.dart';
 import '../login/login_screen.dart';
+import '../../utils/dashboard_key.dart';
 
 class UserProfileScreen extends StatefulWidget {
   const UserProfileScreen({super.key});
@@ -55,7 +55,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           ]),
           backgroundColor: AppColors.success,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
     } catch (e) {
@@ -66,7 +67,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           content: Text('Failed to save: $e'),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
     }
@@ -77,7 +79,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Logout', style: TextStyle(fontWeight: FontWeight.bold)),
+        title:
+            const Text('Logout', style: TextStyle(fontWeight: FontWeight.bold)),
         content: const Text('Are you sure you want to logout?'),
         actions: [
           TextButton(
@@ -87,7 +90,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Logout',
-                style: TextStyle(color: AppColors.error, fontWeight: FontWeight.w600)),
+                style: TextStyle(
+                    color: AppColors.error, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -113,7 +117,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: StreamBuilder<DocumentSnapshot>(
-        stream: _firestore.collection('users').doc(firebaseUser.uid).snapshots(),
+        stream:
+            _firestore.collection('users').doc(firebaseUser.uid).snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -125,17 +130,20 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           final data = snapshot.data!.data() as Map<String, dynamic>;
 
           // ── Parse fields ──────────────────────────────────────────
-          final name     = (data['name'] ?? firebaseUser.displayName ?? 'User').toString();
-          final email    = (data['email'] ?? firebaseUser.email ?? '').toString();
-          final phone    = (data['phone'] ?? '').toString();
-          final houseNo  = (data['house_no']
-                  ?? (data['unit_info'] as Map?)?['house_no']
-                  ?? '').toString();
+          final name =
+              (data['name'] ?? firebaseUser.displayName ?? 'User').toString();
+          final email = (data['email'] ?? firebaseUser.email ?? '').toString();
+          final phone = (data['phone'] ?? '').toString();
+          final houseNo = (data['house_no'] ??
+                  (data['unit_info'] as Map?)?['house_no'] ??
+                  '')
+              .toString();
           final vehicleNo = (data['vehicle_no'] ?? '').toString().trim();
 
           final accountLink = data['account_link'] as Map?;
-          final isOwner   = accountLink == null || accountLink['primary_owner_uid'] == null;
-          final linkedAs  = (accountLink?['linked_as'] ?? '').toString();
+          final isOwner =
+              accountLink == null || accountLink['primary_owner_uid'] == null;
+          final linkedAs = (accountLink?['linked_as'] ?? '').toString();
           final roleLabel = isOwner
               ? 'Owner'
               : (linkedAs.isNotEmpty
@@ -146,16 +154,24 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           final memberSince = createdAt is Timestamp
               ? DateFormat('dd MMM yyyy').format(createdAt.toDate())
               : (firebaseUser.metadata.creationTime != null
-                  ? DateFormat('dd MMM yyyy').format(firebaseUser.metadata.creationTime!)
+                  ? DateFormat('dd MMM yyyy')
+                      .format(firebaseUser.metadata.creationTime!)
                   : '—');
 
           final rawLastPay = data['last_payment_date'];
           final lastPayment = rawLastPay is Timestamp
               ? DateFormat('dd MMM yyyy').format(rawLastPay.toDate())
-              : (rawLastPay is String && rawLastPay.isNotEmpty ? rawLastPay : '—');
+              : (rawLastPay is String && rawLastPay.isNotEmpty
+                  ? rawLastPay
+                  : '—');
 
           final initials = name.trim().isNotEmpty
-              ? name.trim().split(' ').take(2).map((w) => w[0].toUpperCase()).join()
+              ? name
+                  .trim()
+                  .split(' ')
+                  .take(2)
+                  .map((w) => w[0].toUpperCase())
+                  .join()
               : '?';
 
           // Sync vehicle controller when not actively editing
@@ -172,24 +188,29 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 backgroundColor: AppColors.primaryDark,
                 leading: Navigator.canPop(context)
                     ? IconButton(
-                        icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                        icon: const Icon(Icons.arrow_back_rounded,
+                            color: Colors.white),
                         onPressed: () => Navigator.pop(context),
                       )
                     : IconButton(
-                        icon: const Icon(Icons.menu_rounded, color: Colors.white),
-                        onPressed: () => dashboardScaffoldKey.currentState?.openDrawer(),
+                        icon:
+                            const Icon(Icons.menu_rounded, color: Colors.white),
+                        onPressed: () =>
+                            dashboardScaffoldKey.currentState?.openDrawer(),
                       ),
                 actions: [
                   if (Navigator.canPop(context))
                     IconButton(
                       icon: const Icon(Icons.menu_rounded, color: Colors.white),
-                      onPressed: () => dashboardScaffoldKey.currentState?.openDrawer(),
+                      onPressed: () =>
+                          dashboardScaffoldKey.currentState?.openDrawer(),
                     ),
                 ],
                 flexibleSpace: FlexibleSpaceBar(
                   collapseMode: CollapseMode.pin,
                   background: Container(
-                    decoration: const BoxDecoration(gradient: AppTheme.primaryGradient),
+                    decoration:
+                        const BoxDecoration(gradient: AppTheme.primaryGradient),
                     child: Stack(
                       children: [
                         // Decorative circle
@@ -219,34 +240,43 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                   color: Colors.white.withOpacity(0.2),
                                   shape: BoxShape.circle,
                                   border: Border.all(
-                                      color: Colors.white.withOpacity(0.4), width: 2.5),
+                                      color: Colors.white.withOpacity(0.4),
+                                      width: 2.5),
                                 ),
                                 child: Center(
                                   child: Text(
                                     initials,
                                     style: const TextStyle(
-                                        fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white),
+                                        fontSize: 32,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white),
                                   ),
                                 ),
                               ),
                               const SizedBox(height: 12),
                               Text(name,
                                   style: const TextStyle(
-                                      fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white)),
                               const SizedBox(height: 6),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   if (houseNo.isNotEmpty) ...[
-                                    const Icon(Icons.home_outlined, color: Colors.white70, size: 13),
+                                    const Icon(Icons.home_outlined,
+                                        color: Colors.white70, size: 13),
                                     const SizedBox(width: 4),
                                     Text('House $houseNo',
                                         style: TextStyle(
-                                            color: Colors.white.withOpacity(0.85), fontSize: 13)),
+                                            color:
+                                                Colors.white.withOpacity(0.85),
+                                            fontSize: 13)),
                                     const SizedBox(width: 8),
                                   ],
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 2),
                                     decoration: BoxDecoration(
                                       color: Colors.white.withOpacity(0.18),
                                       borderRadius: BorderRadius.circular(10),
@@ -280,15 +310,20 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         headerLabel: 'Profile Details',
                         child: Column(
                           children: [
-                            _infoRow(Icons.email_outlined, 'Email', email.isNotEmpty ? email : '—'),
+                            _infoRow(Icons.email_outlined, 'Email',
+                                email.isNotEmpty ? email : '—'),
                             _divider(),
-                            _infoRow(Icons.phone_outlined, 'Phone', phone.isNotEmpty ? phone : '—'),
+                            _infoRow(Icons.phone_outlined, 'Phone',
+                                phone.isNotEmpty ? phone : '—'),
                             _divider(),
-                            _infoRow(Icons.home_outlined, 'House No.', houseNo.isNotEmpty ? houseNo : '—'),
+                            _infoRow(Icons.home_outlined, 'House No.',
+                                houseNo.isNotEmpty ? houseNo : '—'),
                             _divider(),
-                            _infoRow(Icons.calendar_today_outlined, 'Member Since', memberSince),
+                            _infoRow(Icons.calendar_today_outlined,
+                                'Member Since', memberSince),
                             _divider(),
-                            _infoRow(Icons.payment_outlined, 'Last Payment', lastPayment),
+                            _infoRow(Icons.payment_outlined, 'Last Payment',
+                                lastPayment),
                           ],
                         ),
                       ),
@@ -308,11 +343,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                   width: 36,
                                   height: 36,
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFF59E0B).withOpacity(0.12),
+                                    color: const Color(0xFFF59E0B)
+                                        .withOpacity(0.12),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
-                                  child: const Icon(Icons.directions_car_rounded,
-                                      color: Color(0xFFF59E0B), size: 18),
+                                  child: const Icon(
+                                      Icons.directions_car_rounded,
+                                      color: Color(0xFFF59E0B),
+                                      size: 18),
                                 ),
                                 const SizedBox(width: 12),
                                 const Expanded(
@@ -328,11 +366,13 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                       _vehicleCtrl.text = vehicleNo;
                                       setState(() => _editingVehicle = true);
                                     },
-                                    icon: const Icon(Icons.edit_rounded, size: 15),
+                                    icon: const Icon(Icons.edit_rounded,
+                                        size: 15),
                                     label: const Text('Edit'),
                                     style: TextButton.styleFrom(
                                         foregroundColor: AppColors.primary,
-                                        padding: const EdgeInsets.symmetric(horizontal: 8)),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8)),
                                   ),
                               ],
                             ),
@@ -341,7 +381,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                               // Plate-style display
                               Container(
                                 width: double.infinity,
-                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 14),
                                 decoration: BoxDecoration(
                                   color: vehicleNo.isNotEmpty
                                       ? const Color(0xFFFEF3C7)
@@ -349,17 +390,21 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                   borderRadius: BorderRadius.circular(10),
                                   border: Border.all(
                                     color: vehicleNo.isNotEmpty
-                                        ? const Color(0xFFF59E0B).withOpacity(0.5)
+                                        ? const Color(0xFFF59E0B)
+                                            .withOpacity(0.5)
                                         : AppColors.border,
                                   ),
                                 ),
                                 child: Center(
                                   child: Text(
-                                    vehicleNo.isNotEmpty ? vehicleNo : 'Not set — tap Edit to add',
+                                    vehicleNo.isNotEmpty
+                                        ? vehicleNo
+                                        : 'Not set — tap Edit to add',
                                     style: TextStyle(
                                       fontSize: vehicleNo.isNotEmpty ? 18 : 13,
                                       fontWeight: FontWeight.bold,
-                                      letterSpacing: vehicleNo.isNotEmpty ? 2.0 : 0,
+                                      letterSpacing:
+                                          vehicleNo.isNotEmpty ? 2.0 : 0,
                                       color: vehicleNo.isNotEmpty
                                           ? const Color(0xFF92400E)
                                           : AppColors.textHint,
@@ -371,11 +416,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                               TextField(
                                 controller: _vehicleCtrl,
                                 autofocus: true,
-                                textCapitalization: TextCapitalization.characters,
+                                textCapitalization:
+                                    TextCapitalization.characters,
                                 decoration: AppTheme.inputDecoration(
-                                    'e.g. MH12AB1234', Icons.directions_car_rounded),
+                                    'e.g. MH12AB1234',
+                                    Icons.directions_car_rounded),
                                 style: const TextStyle(
-                                    letterSpacing: 1.5, fontWeight: FontWeight.w600),
+                                    letterSpacing: 1.5,
+                                    fontWeight: FontWeight.w600),
                               ),
                               const SizedBox(height: 12),
                               Row(
@@ -384,7 +432,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                     child: OutlinedButton(
                                       onPressed: _savingVehicle
                                           ? null
-                                          : () => setState(() => _editingVehicle = false),
+                                          : () => setState(
+                                              () => _editingVehicle = false),
                                       child: const Text('Cancel'),
                                     ),
                                   ),
@@ -393,15 +442,19 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                     child: ElevatedButton.icon(
                                       onPressed: _savingVehicle
                                           ? null
-                                          : () => _saveVehicleNo(firebaseUser.uid),
+                                          : () =>
+                                              _saveVehicleNo(firebaseUser.uid),
                                       icon: _savingVehicle
                                           ? const SizedBox(
                                               width: 14,
                                               height: 14,
                                               child: CircularProgressIndicator(
-                                                  strokeWidth: 2, color: Colors.white))
-                                          : const Icon(Icons.check_rounded, size: 18),
-                                      label: Text(_savingVehicle ? 'Saving…' : 'Save'),
+                                                  strokeWidth: 2,
+                                                  color: Colors.white))
+                                          : const Icon(Icons.check_rounded,
+                                              size: 18),
+                                      label: Text(
+                                          _savingVehicle ? 'Saving…' : 'Save'),
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: AppColors.primary,
                                         foregroundColor: Colors.white,
@@ -438,7 +491,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                     'name': name,
                                     'house_no': houseNo,
                                     'phone': phone,
-                                    if (vehicleNo.isNotEmpty) 'vehicle_no': vehicleNo,
+                                    if (vehicleNo.isNotEmpty)
+                                      'vehicle_no': vehicleNo,
                                   }),
                                   version: QrVersions.auto,
                                   size: 190,
@@ -454,7 +508,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                   const SizedBox(width: 6),
                                   Text(
                                     'Show this at the society gate for entry',
-                                    style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                                    style: TextStyle(
+                                        color: Colors.grey[500], fontSize: 12),
                                   ),
                                 ],
                               ),
@@ -470,10 +525,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         width: double.infinity,
                         child: OutlinedButton.icon(
                           onPressed: _logout,
-                          icon: const Icon(Icons.logout_rounded, color: AppColors.error),
+                          icon: const Icon(Icons.logout_rounded,
+                              color: AppColors.error),
                           label: const Text('Logout',
                               style: TextStyle(
-                                  color: AppColors.error, fontWeight: FontWeight.w600)),
+                                  color: AppColors.error,
+                                  fontWeight: FontWeight.w600)),
                           style: OutlinedButton.styleFrom(
                             side: const BorderSide(color: AppColors.error),
                             padding: const EdgeInsets.symmetric(vertical: 14),
@@ -497,7 +554,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
   // ── Helpers ─────────────────────────────────────────────────────────
 
-  Widget _card({required IconData headerIcon, required String headerLabel, required Widget child}) {
+  Widget _card(
+      {required IconData headerIcon,
+      required String headerLabel,
+      required Widget child}) {
     return Container(
       decoration: AppTheme.cardDecoration,
       child: Column(

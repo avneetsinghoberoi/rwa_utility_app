@@ -31,44 +31,44 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
 
   // ── Quick-access items (Pay only shown to owners) ────────────────
   List<_QuickItem> get _quickItems => [
-    if (_isOwner)
-      _QuickItem(
-        icon: Icons.payment_rounded,
-        label: 'Pay',
-        color: AppColors.primary,
-        screen: const UserPayScreen(),
-      ),
-    _QuickItem(
-      icon: Icons.report_problem_rounded,
-      label: 'Issue',
-      color: AppColors.error,
-      screen: const IssuesScreen(),
-    ),
-    _QuickItem(
-      icon: Icons.campaign_rounded,
-      label: 'Notices',
-      color: const Color(0xFF8B5CF6),
-      screen: const NoticesScreen(),
-    ),
-    _QuickItem(
-      icon: Icons.people_alt_rounded,
-      label: 'Directory',
-      color: const Color(0xFF06B6D4),
-      screen: const DirectoryScreen(),
-    ),
-    _QuickItem(
-      icon: Icons.person_rounded,
-      label: 'Profile',
-      color: AppColors.success,
-      screen: const UserProfileScreen(),
-    ),
-    _QuickItem(
-      icon: Icons.receipt_long_rounded,
-      label: 'Expenses',
-      color: AppColors.warning,
-      screen: const ExpenseScreen(),
-    ),
-  ];
+        if (_isOwner)
+          _QuickItem(
+            icon: Icons.payment_rounded,
+            label: 'Pay',
+            color: AppColors.primary,
+            screen: const UserPayScreen(),
+          ),
+        _QuickItem(
+          icon: Icons.report_problem_rounded,
+          label: 'Issue',
+          color: AppColors.error,
+          screen: const IssuesScreen(),
+        ),
+        _QuickItem(
+          icon: Icons.campaign_rounded,
+          label: 'Notices',
+          color: const Color(0xFF8B5CF6),
+          screen: const NoticesScreen(),
+        ),
+        _QuickItem(
+          icon: Icons.people_alt_rounded,
+          label: 'Directory',
+          color: const Color(0xFF06B6D4),
+          screen: const DirectoryScreen(),
+        ),
+        _QuickItem(
+          icon: Icons.person_rounded,
+          label: 'Profile',
+          color: AppColors.success,
+          screen: const UserProfileScreen(),
+        ),
+        _QuickItem(
+          icon: Icons.receipt_long_rounded,
+          label: 'Expenses',
+          color: AppColors.warning,
+          screen: const ExpenseScreen(),
+        ),
+      ];
 
   // ── Build ───────────────────────────────────────────────────────
   @override
@@ -109,7 +109,8 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
             flexibleSpace: FlexibleSpaceBar(
               collapseMode: CollapseMode.pin,
               background: Container(
-                decoration: const BoxDecoration(gradient: AppTheme.primaryGradient),
+                decoration:
+                    const BoxDecoration(gradient: AppTheme.primaryGradient),
                 child: Stack(
                   children: [
                     // Decorative circle
@@ -192,16 +193,14 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                   ],
                 ),
               ),
-              titlePadding:
-                  const EdgeInsets.only(left: 16, bottom: 14),
+              titlePadding: const EdgeInsets.only(left: 16, bottom: 14),
             ),
           ),
 
           // ── Body content ─────────────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -252,17 +251,18 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     //   2. unit_info.flat_no  (existing tenants: flat_no = owner's house_no)
     //   3. unit_info.house_no (fallback)
     final unitInfo = widget.userData['unit_info'] as Map?;
-    final houseNo = (widget.userData['house_no']
-            ?? unitInfo?['flat_no']
-            ?? unitInfo?['house_no']
-            ?? '').toString();
+    final houseNo = (widget.userData['house_no'] ??
+            unitInfo?['flat_no'] ??
+            unitInfo?['house_no'] ??
+            '')
+        .toString();
 
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('invoices')
           .where('house_no', isEqualTo: houseNo)
-          .where('status', whereIn: ['UNPAID', 'PARTIAL', 'SUBMITTED'])
-          .snapshots(),
+          .where('status',
+              whereIn: ['UNPAID', 'PARTIAL', 'SUBMITTED']).snapshots(),
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
           return _shimmerCard();
@@ -280,19 +280,32 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(20),
-              boxShadow: [BoxShadow(color: AppColors.success.withOpacity(0.25), blurRadius: 20, offset: const Offset(0, 8))],
+              boxShadow: [
+                BoxShadow(
+                    color: AppColors.success.withOpacity(0.25),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8))
+              ],
             ),
             child: Row(
               children: [
-                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 36),
+                const Icon(Icons.check_circle_rounded,
+                    color: Colors.white, size: 36),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('All clear! 🎉', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                      Text('No pending dues for House ${widget.userData['house_no'] ?? ''}',
-                          style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 12)),
+                      const Text('All clear! 🎉',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16)),
+                      Text(
+                          'No pending dues for House ${widget.userData['house_no'] ?? ''}',
+                          style: TextStyle(
+                              color: Colors.white.withOpacity(0.85),
+                              fontSize: 12)),
                     ],
                   ),
                 ),
@@ -310,8 +323,12 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
           final aOrder = order[am['status']] ?? 3;
           final bOrder = order[bm['status']] ?? 3;
           if (aOrder != bOrder) return aOrder.compareTo(bOrder);
-          final aDate = am['due_date'] is Timestamp ? (am['due_date'] as Timestamp).millisecondsSinceEpoch : 0;
-          final bDate = bm['due_date'] is Timestamp ? (bm['due_date'] as Timestamp).millisecondsSinceEpoch : 0;
+          final aDate = am['due_date'] is Timestamp
+              ? (am['due_date'] as Timestamp).millisecondsSinceEpoch
+              : 0;
+          final bDate = bm['due_date'] is Timestamp
+              ? (bm['due_date'] as Timestamp).millisecondsSinceEpoch
+              : 0;
           return aDate.compareTo(bDate);
         });
 
@@ -323,44 +340,55 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
   }
 
   Widget _dueCard(BuildContext context, QueryDocumentSnapshot doc) {
-    final inv       = doc.data() as Map<String, dynamic>;
-    final status    = inv['status']?.toString() ?? 'UNPAID';
-    final type      = inv['type']?.toString() ?? 'MAINTENANCE';
-    final title     = inv['title']?.toString() ?? (type == 'DEMAND' ? 'Special Due' : 'Monthly Maintenance');
-    final desc      = inv['description']?.toString() ?? '';
-    final amount    = (inv['amount'] as num?)?.toInt() ?? 1500;
-    final paidAmt   = (inv['paid_amount'] as num?)?.toInt() ?? 0;
+    final inv = doc.data() as Map<String, dynamic>;
+    final status = inv['status']?.toString() ?? 'UNPAID';
+    final type = inv['type']?.toString() ?? 'MAINTENANCE';
+    final title = inv['title']?.toString() ??
+        (type == 'DEMAND' ? 'Special Due' : 'Monthly Maintenance');
+    final desc = inv['description']?.toString() ?? '';
+    final amount = (inv['amount'] as num?)?.toInt() ?? 1500;
+    final paidAmt = (inv['paid_amount'] as num?)?.toInt() ?? 0;
     final remaining = (amount - paidAmt).clamp(0, amount);
-    final rawDate   = inv['due_date'];
-    final dueDate   = rawDate is Timestamp ? rawDate.toDate() : null;
-    final month     = inv['month']?.toString() ?? '';
-    final isDemand  = type == 'DEMAND';
-    final isOverdue = dueDate != null && dueDate.isBefore(DateTime.now()) && status != 'SUBMITTED';
+    final rawDate = inv['due_date'];
+    final dueDate = rawDate is Timestamp ? rawDate.toDate() : null;
+    final month = inv['month']?.toString() ?? '';
+    final isDemand = type == 'DEMAND';
+    final isOverdue = dueDate != null &&
+        dueDate.isBefore(DateTime.now()) &&
+        status != 'SUBMITTED';
 
     // Colors
     final Color accentColor;
     final List<Color> gradColors;
     if (status == 'SUBMITTED') {
       accentColor = AppColors.warning;
-      gradColors  = [const Color(0xFFD97706), const Color(0xFFF59E0B)];
+      gradColors = [const Color(0xFFD97706), const Color(0xFFF59E0B)];
     } else if (isOverdue) {
       accentColor = AppColors.error;
-      gradColors  = [const Color(0xFFDC2626), const Color(0xFFEF4444)];
+      gradColors = [const Color(0xFFDC2626), const Color(0xFFEF4444)];
     } else if (isDemand) {
       accentColor = const Color(0xFF8B5CF6);
-      gradColors  = [const Color(0xFF7C3AED), const Color(0xFF8B5CF6)];
+      gradColors = [const Color(0xFF7C3AED), const Color(0xFF8B5CF6)];
     } else {
       accentColor = AppColors.primary;
-      gradColors  = [const Color(0xFF1A56DB), const Color(0xFF3B82F6)];
+      gradColors = [const Color(0xFF1A56DB), const Color(0xFF3B82F6)];
     }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: gradColors, begin: Alignment.topLeft, end: Alignment.bottomRight),
+        gradient: LinearGradient(
+            colors: gradColors,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight),
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: accentColor.withOpacity(0.28), blurRadius: 16, offset: const Offset(0, 6))],
+        boxShadow: [
+          BoxShadow(
+              color: accentColor.withOpacity(0.28),
+              blurRadius: 16,
+              offset: const Offset(0, 6))
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -369,43 +397,77 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(20)),
+                decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(20)),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(isDemand ? Icons.request_quote_rounded : Icons.home_outlined, color: Colors.white, size: 12),
+                    Icon(
+                        isDemand
+                            ? Icons.request_quote_rounded
+                            : Icons.home_outlined,
+                        color: Colors.white,
+                        size: 12),
                     const SizedBox(width: 4),
-                    Text(isDemand ? 'Special Due' : 'Monthly Maintenance', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+                    Text(isDemand ? 'Special Due' : 'Monthly Maintenance',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
               if (status == 'SUBMITTED') ...[
                 const SizedBox(width: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(20)),
-                  child: const Text('Under Review', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(20)),
+                  child: const Text('Under Review',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600)),
                 ),
               ],
               if (isOverdue && status != 'SUBMITTED') ...[
                 const SizedBox(width: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.25), borderRadius: BorderRadius.circular(20)),
-                  child: const Text('OVERDUE', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.25),
+                      borderRadius: BorderRadius.circular(20)),
+                  child: const Text('OVERDUE',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold)),
                 ),
               ],
             ],
           ),
           const SizedBox(height: 10),
-          Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+          Text(title,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16)),
           if (desc.isNotEmpty) ...[
             const SizedBox(height: 2),
-            Text(desc, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 12)),
+            Text(desc,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    color: Colors.white.withOpacity(0.75), fontSize: 12)),
           ],
           if (!isDemand && month.isNotEmpty)
             Text(DateFormat('MMMM yyyy').format(DateTime.parse('$month-01')),
-                style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 12)),
+                style: TextStyle(
+                    color: Colors.white.withOpacity(0.75), fontSize: 12)),
           const SizedBox(height: 14),
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -416,17 +478,26 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                   children: [
                     Text(
                       '₹${NumberFormat('#,##0').format(remaining)}',
-                      style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold, height: 1),
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          height: 1),
                     ),
                     if (paidAmt > 0)
-                      Text('of ₹${NumberFormat('#,##0').format(amount)}  •  ₹${NumberFormat('#,##0').format(paidAmt)} paid',
-                          style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 11)),
+                      Text(
+                          'of ₹${NumberFormat('#,##0').format(amount)}  •  ₹${NumberFormat('#,##0').format(paidAmt)} paid',
+                          style: TextStyle(
+                              color: Colors.white.withOpacity(0.75),
+                              fontSize: 11)),
                     if (dueDate != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 4),
                         child: Text(
                           '${isOverdue ? 'Was due' : 'Due by'} ${DateFormat('dd MMM yyyy').format(dueDate)}',
-                          style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 11),
+                          style: TextStyle(
+                              color: Colors.white.withOpacity(0.8),
+                              fontSize: 11),
                         ),
                       ),
                   ],
@@ -440,7 +511,12 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                       builder: (_) => UserPayScreen(
                         invoiceId: doc.id,
                         prefilledAmount: remaining,
-                        monthLabel: isDemand ? title : (month.isNotEmpty ? DateFormat('MMMM yyyy').format(DateTime.parse('$month-01')) : ''),
+                        monthLabel: isDemand
+                            ? title
+                            : (month.isNotEmpty
+                                ? DateFormat('MMMM yyyy')
+                                    .format(DateTime.parse('$month-01'))
+                                : ''),
                         invoiceTitle: title,
                         invoiceDescription: desc,
                         invoiceType: type,
@@ -451,12 +527,15 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                     backgroundColor: Colors.white,
                     foregroundColor: accentColor,
                     elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 18, vertical: 12),
                   ),
                   child: Text(
                     status == 'PARTIAL' ? 'Pay Rest' : 'Pay Now',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 13),
                   ),
                 ),
             ],
@@ -469,11 +548,15 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
   Widget _shimmerCard() {
     return Container(
       height: 120,
-      decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(20)),
-      child: const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))),
+      decoration: BoxDecoration(
+          color: AppColors.border, borderRadius: BorderRadius.circular(20)),
+      child: const Center(
+          child: SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2))),
     );
   }
-
 
   // ── Quick Access Grid ───────────────────────────────────────────
   Widget _buildQuickAccessGrid(BuildContext context) {
@@ -537,8 +620,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
           return _emptyCard('No notices posted yet.');
         }
 
-        final notice =
-            snapshot.data!.docs.first.data() as Map<String, dynamic>;
+        final notice = snapshot.data!.docs.first.data() as Map<String, dynamic>;
         final type = (notice['type'] ?? 'General').toString();
 
         Color typeColor;
@@ -617,9 +699,10 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
   // ── Recent Payments ──────────────────────────────────────────────
   Widget _buildRecentPayments() {
     // Resolve house number with same fallback logic used for dues
-    final houseNo = (widget.userData['house_no']
-            ?? (widget.userData['unit_info'] as Map?)?['house_no']
-            ?? '').toString();
+    final houseNo = (widget.userData['house_no'] ??
+            (widget.userData['unit_info'] as Map?)?['house_no'] ??
+            '')
+        .toString();
 
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance

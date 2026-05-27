@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:gate_basic/config/app_config.dart';
-import 'package:gate_basic/screens/login/login_screen.dart';
 import 'package:gate_basic/utils/admin_dashboard_key.dart';
 
 class AdminNoticesScreen extends StatefulWidget {
@@ -49,8 +48,17 @@ class _AdminNoticesScreenState extends State<AdminNoticesScreen> {
               )
             : IconButton(
                 icon: const Icon(Icons.menu_rounded),
-                onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer(),
+                onPressed: () =>
+                    adminDashboardScaffoldKey.currentState?.openDrawer(),
               ),
+        actions: [
+          if (Navigator.canPop(context))
+            IconButton(
+              icon: const Icon(Icons.menu_rounded),
+              onPressed: () =>
+                  adminDashboardScaffoldKey.currentState?.openDrawer(),
+            ),
+        ],
         title: const Text("Community Notices",
             style: TextStyle(
               fontSize: 22,
@@ -65,13 +73,6 @@ class _AdminNoticesScreenState extends State<AdminNoticesScreen> {
             height: 1,
           ),
         ),
-        actions: [
-          if (Navigator.canPop(context))
-            IconButton(
-              icon: const Icon(Icons.menu_rounded),
-              onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer(),
-            ),
-        ],
       ),
       body: SafeArea(
         child: StreamBuilder<QuerySnapshot>(
@@ -138,7 +139,7 @@ class _AdminNoticesScreenState extends State<AdminNoticesScreen> {
                       itemCount: notices.length,
                       itemBuilder: (context, index) {
                         final data =
-                        notices[index].data() as Map<String, dynamic>;
+                            notices[index].data() as Map<String, dynamic>;
                         return _noticeCard(data);
                       },
                     ),
@@ -200,8 +201,7 @@ class _AdminNoticesScreenState extends State<AdminNoticesScreen> {
                 ],
               ),
               Container(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: color.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
@@ -209,9 +209,7 @@ class _AdminNoticesScreenState extends State<AdminNoticesScreen> {
                 child: Text(
                   n["type"] ?? "",
                   style: TextStyle(
-                      color: color,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12),
+                      color: color, fontWeight: FontWeight.w600, fontSize: 12),
                 ),
               ),
             ],
@@ -261,7 +259,7 @@ class _NewAnnouncementDialogState extends State<NewAnnouncementDialog> {
     setState(() => isSubmitting = true);
 
     try {
-      final user  = FirebaseAuth.instance.currentUser;
+      final user = FirebaseAuth.instance.currentUser;
       final token = await user?.getIdToken() ?? '';
 
       final response = await http.post(
@@ -271,10 +269,10 @@ class _NewAnnouncementDialogState extends State<NewAnnouncementDialog> {
           'Content-Type': 'application/json',
         },
         body: jsonEncode({
-          'title':       titleController.text.trim(),
+          'title': titleController.text.trim(),
           'description': descController.text.trim(),
-          'type':        selectedType ?? 'General',
-          'posted_by':   user?.email ?? 'Admin',
+          'type': selectedType ?? 'General',
+          'posted_by': user?.email ?? 'Admin',
         }),
       );
 
@@ -294,7 +292,8 @@ class _NewAnnouncementDialogState extends State<NewAnnouncementDialog> {
         final msg = (data['error']?['message'] ?? 'Unknown error').toString();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Failed: $msg"), backgroundColor: Colors.red),
+            SnackBar(
+                content: Text("Failed: $msg"), backgroundColor: Colors.red),
           );
         }
       }
@@ -331,8 +330,8 @@ class _NewAnnouncementDialogState extends State<NewAnnouncementDialog> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text("Add New Announcement",
-                      style: TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.bold)),
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   IconButton(
                     onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.close_rounded),
@@ -359,8 +358,7 @@ class _NewAnnouncementDialogState extends State<NewAnnouncementDialog> {
                 decoration: const InputDecoration(labelText: "Type"),
                 value: selectedType,
                 items: types
-                    .map((t) =>
-                    DropdownMenuItem(value: t, child: Text(t)))
+                    .map((t) => DropdownMenuItem(value: t, child: Text(t)))
                     .toList(),
                 onChanged: (v) => setState(() => selectedType = v),
                 validator: (v) => v == null ? "Select a type" : null,
@@ -372,14 +370,13 @@ class _NewAnnouncementDialogState extends State<NewAnnouncementDialog> {
                   icon: const Icon(Icons.upload),
                   label: isSubmitting
                       ? const CircularProgressIndicator(
-                      color: Colors.white, strokeWidth: 2)
+                          color: Colors.white, strokeWidth: 2)
                       : const Text("Post Announcement"),
                   onPressed: isSubmitting ? null : _submitNotice,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.black,
                     foregroundColor: Colors.white,
-                    padding:
-                    const EdgeInsets.symmetric(vertical: 14),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10)),
                   ),
@@ -392,6 +389,3 @@ class _NewAnnouncementDialogState extends State<NewAnnouncementDialog> {
     );
   }
 }
-
-
-

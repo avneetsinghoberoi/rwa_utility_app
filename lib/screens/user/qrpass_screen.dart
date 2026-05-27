@@ -69,16 +69,16 @@ class _QrPassScreenState extends State<QrPassScreen> {
     }
 
     if (userData == null) {
-      return const Scaffold(
-          body: Center(child: Text('No user data found.')));
+      return const Scaffold(body: Center(child: Text('No user data found.')));
     }
 
     final name = (userData!['name'] ?? 'Unknown User').toString();
     // Admin-created residents store house_no at top level;
     // account-sharing users store it inside unit_info.
-    final houseNo = (userData!['house_no']
-            ?? (userData!['unit_info'] as Map?)?['house_no']
-            ?? '-').toString();
+    final houseNo = (userData!['house_no'] ??
+            (userData!['unit_info'] as Map?)?['house_no'] ??
+            '-')
+        .toString();
     final initials = name.isNotEmpty ? name[0].toUpperCase() : '?';
 
     // Relationship label for tenants/family (null for primary owners)
@@ -101,18 +101,21 @@ class _QrPassScreenState extends State<QrPassScreen> {
             backgroundColor: AppColors.primaryDark,
             leading: Navigator.canPop(context)
                 ? IconButton(
-                    icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                    icon: const Icon(Icons.arrow_back_rounded,
+                        color: Colors.white),
                     onPressed: () => Navigator.pop(context),
                   )
                 : IconButton(
                     icon: const Icon(Icons.menu_rounded, color: Colors.white),
-                    onPressed: () => dashboardScaffoldKey.currentState?.openDrawer(),
+                    onPressed: () =>
+                        dashboardScaffoldKey.currentState?.openDrawer(),
                   ),
             actions: [
               if (Navigator.canPop(context))
                 IconButton(
                   icon: const Icon(Icons.menu_rounded, color: Colors.white),
-                  onPressed: () => dashboardScaffoldKey.currentState?.openDrawer(),
+                  onPressed: () =>
+                      dashboardScaffoldKey.currentState?.openDrawer(),
                 ),
             ],
             flexibleSpace: FlexibleSpaceBar(
@@ -257,8 +260,10 @@ class _QrPassScreenState extends State<QrPassScreen> {
     }
 
     final rows = [
-      _InfoEntry('Email', userData!['email']?.toString() ?? '-', Icons.email_outlined),
-      _InfoEntry('Phone', userData!['phone']?.toString() ?? '-', Icons.phone_outlined),
+      _InfoEntry(
+          'Email', userData!['email']?.toString() ?? '-', Icons.email_outlined),
+      _InfoEntry(
+          'Phone', userData!['phone']?.toString() ?? '-', Icons.phone_outlined),
       _InfoEntry('Last Payment', lastPayment, Icons.calendar_today_outlined),
     ];
 
@@ -292,9 +297,7 @@ class _QrPassScreenState extends State<QrPassScreen> {
                 _buildInfoRow(entry.value),
                 if (!isLast)
                   const Divider(
-                      height: 1,
-                      color: AppColors.divider,
-                      indent: 56),
+                      height: 1, color: AppColors.divider, indent: 56),
               ],
             );
           }),
@@ -405,8 +408,7 @@ class _QrPassScreenState extends State<QrPassScreen> {
                     const SizedBox(width: 6),
                     Text(
                       'Show this at the society gate for entry',
-                      style:
-                          TextStyle(color: Colors.grey[500], fontSize: 12),
+                      style: TextStyle(color: Colors.grey[500], fontSize: 12),
                     ),
                   ],
                 ),
@@ -452,12 +454,10 @@ class InfoRow extends StatelessWidget {
         children: [
           Text(label,
               style: const TextStyle(
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textPrimary)),
+                  fontWeight: FontWeight.w500, color: AppColors.textPrimary)),
           Flexible(
               child: Text(value,
-                  style:
-                      const TextStyle(color: AppColors.textSecondary))),
+                  style: const TextStyle(color: AppColors.textSecondary))),
         ],
       ),
     );

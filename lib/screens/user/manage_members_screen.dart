@@ -41,7 +41,8 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
               )
             : IconButton(
                 icon: const Icon(Icons.menu_rounded, color: Colors.white),
-                onPressed: () => dashboardScaffoldKey.currentState?.openDrawer(),
+                onPressed: () =>
+                    dashboardScaffoldKey.currentState?.openDrawer(),
               ),
         actions: [
           if (Navigator.canPop(context))
@@ -169,9 +170,8 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                   member: member,
                   isOwner: isOwner,
                   isSelf: isSelf,
-                  canRemove: currentUser.canManageFlatMembers &&
-                      !isOwner &&
-                      !isSelf,
+                  canRemove:
+                      currentUser.canManageFlatMembers && !isOwner && !isSelf,
                   onRemove: () => _showRemoveConfirmation(member),
                 );
               },
@@ -226,7 +226,9 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
                       Expanded(
                         child: Text(
                           member.name,
-                          style: Theme.of(context).textTheme.titleMedium
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
                               ?.copyWith(fontWeight: FontWeight.bold),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -279,12 +281,12 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
             // Actions
             if (isOwner)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: AppColors.primary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(6),
-                  border:
-                      Border.all(color: AppColors.primary, width: 1.5),
+                  border: Border.all(color: AppColors.primary, width: 1.5),
                 ),
                 child: Text(
                   'Owner',
@@ -463,10 +465,8 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return;
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
+      final doc =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
       if (doc.exists && mounted) {
         setState(() {
           currentUser = UserModel.User.fromFirestore(doc);
@@ -494,8 +494,9 @@ class _ManageMembersScreenState extends State<ManageMembersScreen> {
           whereIn: currentUser.flatMembers,
         )
         .snapshots()
-        .map((snapshot) =>
-            snapshot.docs.map((doc) => UserModel.User.fromFirestore(doc)).toList());
+        .map((snapshot) => snapshot.docs
+            .map((doc) => UserModel.User.fromFirestore(doc))
+            .toList());
   }
 
   String _getRelationshipLabel(String relationship) {

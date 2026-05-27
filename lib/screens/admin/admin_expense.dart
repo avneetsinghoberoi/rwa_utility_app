@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import 'package:gate_basic/screens/login/login_screen.dart';
 import 'package:gate_basic/utils/admin_dashboard_key.dart';
 
 class AdminExpenseScreen extends StatefulWidget {
@@ -63,8 +62,17 @@ class _AdminExpenseScreenState extends State<AdminExpenseScreen> {
               )
             : IconButton(
                 icon: const Icon(Icons.menu_rounded),
-                onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer(),
+                onPressed: () =>
+                    adminDashboardScaffoldKey.currentState?.openDrawer(),
               ),
+        actions: [
+          if (Navigator.canPop(context))
+            IconButton(
+              icon: const Icon(Icons.menu_rounded),
+              onPressed: () =>
+                  adminDashboardScaffoldKey.currentState?.openDrawer(),
+            ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(
@@ -72,15 +80,7 @@ class _AdminExpenseScreenState extends State<AdminExpenseScreen> {
             height: 1,
           ),
         ),
-        actions: [
-          if (Navigator.canPop(context))
-            IconButton(
-              icon: const Icon(Icons.menu_rounded),
-              onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer(),
-            ),
-        ],
       ),
-
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -89,17 +89,22 @@ class _AdminExpenseScreenState extends State<AdminExpenseScreen> {
             // ✅ Month selector (admin portal view)
             Row(
               children: [
-                const Text("Month: ", style: TextStyle(fontWeight: FontWeight.w600)),
+                const Text("Month: ",
+                    style: TextStyle(fontWeight: FontWeight.w600)),
                 const SizedBox(width: 12),
                 Expanded(
                   child: StreamBuilder<QuerySnapshot>(
-                    stream: _expensesRef.orderBy('monthKey', descending: true).snapshots(),
+                    stream: _expensesRef
+                        .orderBy('monthKey', descending: true)
+                        .snapshots(),
                     builder: (context, snap) {
                       if (!snap.hasData) return const SizedBox(height: 48);
 
                       final docs = snap.data!.docs;
                       final months = docs
-                          .map((d) => (d.data() as Map<String, dynamic>)['monthKey']?.toString())
+                          .map((d) =>
+                              (d.data() as Map<String, dynamic>)['monthKey']
+                                  ?.toString())
                           .whereType<String>()
                           .toSet()
                           .toList()
@@ -117,9 +122,9 @@ class _AdminExpenseScreenState extends State<AdminExpenseScreen> {
                         value: selectedMonthKey,
                         items: months
                             .map((m) => DropdownMenuItem(
-                          value: m,
-                          child: Text(_prettyMonthLabelFromKey(m)),
-                        ))
+                                  value: m,
+                                  child: Text(_prettyMonthLabelFromKey(m)),
+                                ))
                             .toList(),
                         onChanged: (v) {
                           if (v == null) return;
@@ -154,8 +159,12 @@ class _AdminExpenseScreenState extends State<AdminExpenseScreen> {
 
                   final docs = (snapshot.data?.docs ?? []).toList()
                     ..sort((a, b) {
-                      final ad = ((a.data() as Map<String, dynamic>)['date'] as Timestamp?)?.toDate();
-                      final bd = ((b.data() as Map<String, dynamic>)['date'] as Timestamp?)?.toDate();
+                      final ad = ((a.data() as Map<String, dynamic>)['date']
+                              as Timestamp?)
+                          ?.toDate();
+                      final bd = ((b.data() as Map<String, dynamic>)['date']
+                              as Timestamp?)
+                          ?.toDate();
                       if (ad == null && bd == null) return 0;
                       if (ad == null) return 1;
                       if (bd == null) return -1;
@@ -170,7 +179,8 @@ class _AdminExpenseScreenState extends State<AdminExpenseScreen> {
                     final amount = (data['amount'] ?? 0) as num;
                     totalMonth += amount;
 
-                    final c = (data['label'] ?? data['category'] ?? '').toString();
+                    final c =
+                        (data['label'] ?? data['category'] ?? '').toString();
                     if (c.isNotEmpty) categorySet.add(c);
                   }
 
@@ -213,7 +223,8 @@ class _AdminExpenseScreenState extends State<AdminExpenseScreen> {
                         children: [
                           const Text(
                             "Expense Management",
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.bold),
                           ),
                           ElevatedButton.icon(
                             onPressed: _openAddExpenseDialog,
@@ -242,26 +253,48 @@ class _AdminExpenseScreenState extends State<AdminExpenseScreen> {
                           child: SingleChildScrollView(
                             child: DataTable(
                               columnSpacing: 26,
-                              headingRowColor: MaterialStateProperty.all(const Color(0xFFF4F6F8)),
+                              headingRowColor: MaterialStateProperty.all(
+                                  const Color(0xFFF4F6F8)),
                               columns: const [
-                                DataColumn(label: Text("Date", style: TextStyle(fontWeight: FontWeight.bold))),
-                                DataColumn(label: Text("Category", style: TextStyle(fontWeight: FontWeight.bold))),
-                                DataColumn(label: Text("Description", style: TextStyle(fontWeight: FontWeight.bold))),
-                                DataColumn(label: Text("Amount", style: TextStyle(fontWeight: FontWeight.bold))),
-                                DataColumn(label: Text("Action", style: TextStyle(fontWeight: FontWeight.bold))),
+                                DataColumn(
+                                    label: Text("Date",
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold))),
+                                DataColumn(
+                                    label: Text("Category",
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold))),
+                                DataColumn(
+                                    label: Text("Description",
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold))),
+                                DataColumn(
+                                    label: Text("Amount",
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold))),
+                                DataColumn(
+                                    label: Text("Action",
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold))),
                               ],
                               rows: docs.map((doc) {
                                 final e = doc.data() as Map<String, dynamic>;
                                 final ts = e['date'];
-                                final date = ts is Timestamp ? ts.toDate() : DateTime.now();
+                                final date = ts is Timestamp
+                                    ? ts.toDate()
+                                    : DateTime.now();
 
-                                final label = (e['label'] ?? e['category'] ?? '').toString();
-                                final description = (e['description'] ?? '').toString();
+                                final label =
+                                    (e['label'] ?? e['category'] ?? '')
+                                        .toString();
+                                final description =
+                                    (e['description'] ?? '').toString();
                                 final amount = (e['amount'] ?? 0) as num;
 
                                 return DataRow(
                                   cells: [
-                                    DataCell(Text(DateFormat('d/M/yyyy').format(date))),
+                                    DataCell(Text(
+                                        DateFormat('d/M/yyyy').format(date))),
                                     DataCell(Text(label)),
                                     DataCell(Text(description)),
                                     DataCell(Text(_formatCurrency(amount))),
@@ -269,7 +302,9 @@ class _AdminExpenseScreenState extends State<AdminExpenseScreen> {
                                       IconButton(
                                         icon: const Icon(Icons.delete_outline),
                                         onPressed: () async {
-                                          await _expensesRef.doc(doc.id).delete();
+                                          await _expensesRef
+                                              .doc(doc.id)
+                                              .delete();
                                         },
                                       ),
                                     ),
@@ -300,7 +335,8 @@ class _AdminExpenseScreenState extends State<AdminExpenseScreen> {
     return DateFormat('MMMM yyyy').format(DateTime(year, month, 1));
   }
 
-  Widget _buildSummaryCard(String title, String value, String subtitle, IconData icon) {
+  Widget _buildSummaryCard(
+      String title, String value, String subtitle, IconData icon) {
     return Expanded(
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -319,9 +355,12 @@ class _AdminExpenseScreenState extends State<AdminExpenseScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  Text(title,
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 6),
-                  Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  Text(value,
+                      style: const TextStyle(
+                          fontSize: 20, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 2),
                   Text(subtitle, style: const TextStyle(color: Colors.grey)),
                 ],
@@ -397,7 +436,8 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
 
     setState(() {
       monthKey = "${picked.year}-${picked.month.toString().padLeft(2, '0')}";
-      monthLabel = DateFormat('MMMM yyyy').format(DateTime(picked.year, picked.month, 1));
+      monthLabel = DateFormat('MMMM yyyy')
+          .format(DateTime(picked.year, picked.month, 1));
     });
   }
 
@@ -420,8 +460,8 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
     await FirebaseFirestore.instance.collection('expenses').add({
       "date": Timestamp.fromDate(date),
       "monthKey": monthKey,
-      "monthLabel": monthLabel,          // optional, but useful
-      "label": category,                 // ✅ use 'label' consistently
+      "monthLabel": monthLabel, // optional, but useful
+      "label": category, // ✅ use 'label' consistently
       "description": description.trim(),
       "amount": parsedAmount,
       "createdAt": FieldValue.serverTimestamp(),
@@ -434,7 +474,8 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: const Text("Add New Expense", style: TextStyle(fontWeight: FontWeight.bold)),
+      title: const Text("Add New Expense",
+          style: TextStyle(fontWeight: FontWeight.bold)),
       content: SingleChildScrollView(
         child: Form(
           key: _formKey,
@@ -456,7 +497,9 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(labelText: "Category"),
                 value: category,
-                items: categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                items: categories
+                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                    .toList(),
                 onChanged: (value) => setState(() => category = value),
               ),
               const SizedBox(height: 10),
@@ -519,6 +562,3 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
     );
   }
 }
-
-
-

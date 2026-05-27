@@ -21,7 +21,7 @@ class _CreateDemandDueScreenState extends State<CreateDemandDueScreen> {
 
   final _formKey = GlobalKey<FormState>();
   final _titleCtrl = TextEditingController();
-  final _descCtrl  = TextEditingController();
+  final _descCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
 
   String _category = 'Maintenance';
@@ -34,7 +34,14 @@ class _CreateDemandDueScreenState extends State<CreateDemandDueScreen> {
   List<Map<String, dynamic>> _allMembers = [];
   final Set<String> _selectedHouses = {};
 
-  static const _categories = ['Maintenance', 'Repair', 'Renovation', 'Event', 'Utility', 'Other'];
+  static const _categories = [
+    'Maintenance',
+    'Repair',
+    'Renovation',
+    'Event',
+    'Utility',
+    'Other'
+  ];
 
   @override
   void initState() {
@@ -89,7 +96,7 @@ class _CreateDemandDueScreenState extends State<CreateDemandDueScreen> {
 
     setState(() => _loading = true);
     try {
-      final user  = FirebaseAuth.instance.currentUser;
+      final user = FirebaseAuth.instance.currentUser;
       final token = await user?.getIdToken(true);
 
       final response = await http.post(
@@ -99,13 +106,14 @@ class _CreateDemandDueScreenState extends State<CreateDemandDueScreen> {
           if (token != null) 'Authorization': 'Bearer $token',
         },
         body: jsonEncode({
-          'title':         _titleCtrl.text.trim(),
-          'description':   _descCtrl.text.trim(),
-          'category':      _category,
+          'title': _titleCtrl.text.trim(),
+          'description': _descCtrl.text.trim(),
+          'category': _category,
           'amountPerUnit': int.parse(_amountCtrl.text.trim()),
-          'targetType':    _targetType,
-          'targetHouses':  _targetType == 'SPECIFIC' ? _selectedHouses.toList() : [],
-          'dueDateMs':     _dueDate.millisecondsSinceEpoch,
+          'targetType': _targetType,
+          'targetHouses':
+              _targetType == 'SPECIFIC' ? _selectedHouses.toList() : [],
+          'dueDateMs': _dueDate.millisecondsSinceEpoch,
         }),
       );
 
@@ -167,13 +175,15 @@ class _CreateDemandDueScreenState extends State<CreateDemandDueScreen> {
               )
             : IconButton(
                 icon: const Icon(Icons.menu_rounded),
-                onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer(),
+                onPressed: () =>
+                    adminDashboardScaffoldKey.currentState?.openDrawer(),
               ),
         actions: [
           if (Navigator.canPop(context))
             IconButton(
               icon: const Icon(Icons.menu_rounded),
-              onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer(),
+              onPressed: () =>
+                  adminDashboardScaffoldKey.currentState?.openDrawer(),
             ),
         ],
         bottom: PreferredSize(
@@ -199,7 +209,8 @@ class _CreateDemandDueScreenState extends State<CreateDemandDueScreen> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.info_outline_rounded, color: AppColors.primary, size: 18),
+                  const Icon(Icons.info_outline_rounded,
+                      color: AppColors.primary, size: 18),
                   const SizedBox(width: 10),
                   const Expanded(
                     child: Text(
@@ -222,14 +233,19 @@ class _CreateDemandDueScreenState extends State<CreateDemandDueScreen> {
                 children: [
                   TextFormField(
                     controller: _titleCtrl,
-                    decoration: AppTheme.inputDecoration('Title (e.g. Society Painting Q2 2026)', Icons.title_rounded),
-                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Title is required' : null,
+                    decoration: AppTheme.inputDecoration(
+                        'Title (e.g. Society Painting Q2 2026)',
+                        Icons.title_rounded),
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? 'Title is required'
+                        : null,
                     textCapitalization: TextCapitalization.words,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _descCtrl,
-                    decoration: AppTheme.inputDecoration('Description / Purpose', Icons.description_outlined),
+                    decoration: AppTheme.inputDecoration(
+                        'Description / Purpose', Icons.description_outlined),
                     maxLines: 3,
                     textCapitalization: TextCapitalization.sentences,
                   ),
@@ -238,15 +254,20 @@ class _CreateDemandDueScreenState extends State<CreateDemandDueScreen> {
                   // Category dropdown
                   DropdownButtonFormField<String>(
                     value: _category,
-                    decoration: AppTheme.inputDecoration('Category', Icons.category_outlined),
-                    items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                    onChanged: (v) => setState(() => _category = v ?? 'Maintenance'),
+                    decoration: AppTheme.inputDecoration(
+                        'Category', Icons.category_outlined),
+                    items: _categories
+                        .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                        .toList(),
+                    onChanged: (v) =>
+                        setState(() => _category = v ?? 'Maintenance'),
                   ),
                   const SizedBox(height: 12),
 
                   TextFormField(
                     controller: _amountCtrl,
-                    decoration: AppTheme.inputDecoration('Amount per Flat (₹)', Icons.currency_rupee_rounded),
+                    decoration: AppTheme.inputDecoration(
+                        'Amount per Flat (₹)', Icons.currency_rupee_rounded),
                     keyboardType: TextInputType.number,
                     validator: (v) {
                       final n = int.tryParse(v ?? '');
@@ -276,23 +297,31 @@ class _CreateDemandDueScreenState extends State<CreateDemandDueScreen> {
                         color: AppColors.primaryLight,
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(Icons.calendar_month_rounded, color: AppColors.primary, size: 22),
+                      child: const Icon(Icons.calendar_month_rounded,
+                          color: AppColors.primary, size: 22),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Payment Due By', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                          const Text('Payment Due By',
+                              style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 12)),
                           const SizedBox(height: 2),
                           Text(
                             DateFormat('dd MMMM yyyy').format(_dueDate),
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textPrimary),
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                                color: AppColors.textPrimary),
                           ),
                         ],
                       ),
                     ),
-                    const Icon(Icons.chevron_right_rounded, color: AppColors.textHint),
+                    const Icon(Icons.chevron_right_rounded,
+                        color: AppColors.textHint),
                   ],
                 ),
               ),
@@ -308,15 +337,20 @@ class _CreateDemandDueScreenState extends State<CreateDemandDueScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _targetOption('ALL', 'All Residents', 'Charge every flat in the society', Icons.groups_rounded),
+                  _targetOption('ALL', 'All Residents',
+                      'Charge every flat in the society', Icons.groups_rounded),
                   const SizedBox(height: 8),
-                  _targetOption('SPECIFIC', 'Specific Flats', 'Choose which flats to charge', Icons.home_rounded),
-
+                  _targetOption('SPECIFIC', 'Specific Flats',
+                      'Choose which flats to charge', Icons.home_rounded),
                   if (_targetType == 'SPECIFIC') ...[
                     const SizedBox(height: 16),
                     const Divider(height: 1, color: AppColors.border),
                     const SizedBox(height: 14),
-                    const Text('Select flats to charge:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.textSecondary)),
+                    const Text('Select flats to charge:',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: AppColors.textSecondary)),
                     const SizedBox(height: 10),
                     _loadingMembers
                         ? const Center(child: CircularProgressIndicator())
@@ -344,11 +378,15 @@ class _CreateDemandDueScreenState extends State<CreateDemandDueScreen> {
   Widget _sectionLabel(String text) {
     return Text(
       text,
-      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+      style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+          color: AppColors.textSecondary),
     );
   }
 
-  Widget _targetOption(String value, String title, String subtitle, IconData icon) {
+  Widget _targetOption(
+      String value, String title, String subtitle, IconData icon) {
     final selected = _targetType == value;
     return GestureDetector(
       onTap: () => setState(() => _targetType = value),
@@ -379,12 +417,22 @@ class _CreateDemandDueScreenState extends State<CreateDemandDueScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: selected ? AppColors.primary : AppColors.textPrimary)),
-                  Text(subtitle, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                  Text(title,
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: selected
+                              ? AppColors.primary
+                              : AppColors.textPrimary)),
+                  Text(subtitle,
+                      style: const TextStyle(
+                          fontSize: 11, color: AppColors.textSecondary)),
                 ],
               ),
             ),
-            if (selected) const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 20),
+            if (selected)
+              const Icon(Icons.check_circle_rounded,
+                  color: AppColors.primary, size: 20),
           ],
         ),
       ),
@@ -393,7 +441,8 @@ class _CreateDemandDueScreenState extends State<CreateDemandDueScreen> {
 
   Widget _buildHouseSelector() {
     if (_allMembers.isEmpty) {
-      return const Text('No residents found.', style: TextStyle(color: AppColors.textSecondary));
+      return const Text('No residents found.',
+          style: TextStyle(color: AppColors.textSecondary));
     }
     return Wrap(
       spacing: 8,
@@ -402,14 +451,20 @@ class _CreateDemandDueScreenState extends State<CreateDemandDueScreen> {
         final house = m['house_no']!;
         final selected = _selectedHouses.contains(house);
         return FilterChip(
-          label: Text('$house\n${m['name']}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 11)),
+          label: Text('$house\n${m['name']}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 11)),
           selected: selected,
-          onSelected: (v) => setState(() => v ? _selectedHouses.add(house) : _selectedHouses.remove(house)),
+          onSelected: (v) => setState(() =>
+              v ? _selectedHouses.add(house) : _selectedHouses.remove(house)),
           selectedColor: AppColors.primaryLight,
           checkmarkColor: AppColors.primary,
           backgroundColor: Colors.white,
-          side: BorderSide(color: selected ? AppColors.primary : AppColors.border),
-          labelStyle: TextStyle(color: selected ? AppColors.primary : AppColors.textSecondary, fontWeight: selected ? FontWeight.bold : FontWeight.normal),
+          side: BorderSide(
+              color: selected ? AppColors.primary : AppColors.border),
+          labelStyle: TextStyle(
+              color: selected ? AppColors.primary : AppColors.textSecondary,
+              fontWeight: selected ? FontWeight.bold : FontWeight.normal),
         );
       }).toList(),
     );

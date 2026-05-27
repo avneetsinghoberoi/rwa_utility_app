@@ -194,7 +194,8 @@ class _IssuesScreenState extends State<IssuesScreen> {
               )
             : IconButton(
                 icon: const Icon(Icons.menu_rounded),
-                onPressed: () => dashboardScaffoldKey.currentState?.openDrawer(),
+                onPressed: () =>
+                    dashboardScaffoldKey.currentState?.openDrawer(),
               ),
         actions: [
           if (Navigator.canPop(context))
@@ -290,13 +291,11 @@ class _IssuesScreenState extends State<IssuesScreen> {
               else
                 // ── Complaint cards ──────────────────────────────
                 SliverPadding(
-                  padding:
-                      const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate(
                       (context, index) {
-                        final data =
-                            docs[index].data() as Map<String, dynamic>;
+                        final data = docs[index].data() as Map<String, dynamic>;
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: _buildComplaintCard(data),
@@ -402,8 +401,7 @@ class _IssuesScreenState extends State<IssuesScreen> {
 
             // ── Category tag ────────────────────────────────────
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: AppColors.primaryLight,
                 borderRadius: BorderRadius.circular(8),
@@ -454,7 +452,8 @@ class _IssuesScreenState extends State<IssuesScreen> {
     final s = status.toLowerCase();
     if (s == 'open') return AppColors.error;
     if (s == 'in progress' || s == 'progress') return AppColors.warning;
-    if (s == 'resolved' || s == 'done' || s == 'closed') return AppColors.success;
+    if (s == 'resolved' || s == 'done' || s == 'closed')
+      return AppColors.success;
     return AppColors.textSecondary;
   }
 }

@@ -9,7 +9,6 @@ import 'package:intl/intl.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:gate_basic/config/app_config.dart';
 import 'package:gate_basic/screens/admin/report_pdf_service.dart';
-import 'package:gate_basic/screens/login/login_screen.dart';
 import 'package:gate_basic/theme/app_theme.dart';
 import 'package:gate_basic/utils/admin_dashboard_key.dart';
 
@@ -53,7 +52,7 @@ class _MembersScreenState extends State<MembersScreen> {
   // ── Create resident via Cloud Function ─────────────────────────────────────
   Future<void> _createResident(Map<String, String> data) async {
     final adminUser = FirebaseAuth.instance.currentUser;
-    final token     = await adminUser?.getIdToken(true);
+    final token = await adminUser?.getIdToken(true);
 
     final response = await http.post(
       Uri.parse('$_base/createResidentHttp'),
@@ -62,9 +61,9 @@ class _MembersScreenState extends State<MembersScreen> {
         if (token != null) 'Authorization': 'Bearer $token',
       },
       body: jsonEncode({
-        'name':    data['name'],
-        'email':   data['email'],
-        'phone':   data['phone'],
+        'name': data['name'],
+        'email': data['email'],
+        'phone': data['phone'],
         'houseNo': data['houseNo'],
       }),
     );
@@ -76,15 +75,15 @@ class _MembersScreenState extends State<MembersScreen> {
     }
 
     final tempPassword = body['tempPassword']?.toString() ?? '';
-    final emailSent    = body['emailSent'] == true;
+    final emailSent = body['emailSent'] == true;
 
     if (mounted) {
       await _showCreatedDialog(
-        name:         data['name']!,
-        email:        data['email']!,
-        houseNo:      data['houseNo']!,
+        name: data['name']!,
+        email: data['email']!,
+        houseNo: data['houseNo']!,
         tempPassword: tempPassword,
-        emailSent:    emailSent,
+        emailSent: emailSent,
       );
     }
   }
@@ -95,7 +94,8 @@ class _MembersScreenState extends State<MembersScreen> {
       context: context,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Delete Resident', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Delete Resident',
+            style: TextStyle(fontWeight: FontWeight.bold)),
         content: Text(
           'Are you sure you want to delete "$name"?\n\n'
           'This will permanently remove their account and login access. '
@@ -112,7 +112,8 @@ class _MembersScreenState extends State<MembersScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.error,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
             ),
             child: const Text('Delete'),
           ),
@@ -124,7 +125,7 @@ class _MembersScreenState extends State<MembersScreen> {
 
     setState(() => _deleting = true);
     try {
-      final user  = FirebaseAuth.instance.currentUser;
+      final user = FirebaseAuth.instance.currentUser;
       final token = await user?.getIdToken(true);
 
       final response = await http.post(
@@ -172,13 +173,14 @@ class _MembersScreenState extends State<MembersScreen> {
           .collection('users')
           .doc(FirebaseAuth.instance.currentUser?.uid)
           .get();
-      final societyName = adminDoc.data()?['societyName']?.toString() ?? 'RWA Society';
+      final societyName =
+          adminDoc.data()?['societyName']?.toString() ?? 'RWA Society';
 
       final entries = await ReportPdfService.fetchMonthData(selected);
-      final file    = await ReportPdfService.generateReport(
-        monthKey:    selected,
+      final file = await ReportPdfService.generateReport(
+        monthKey: selected,
         societyName: societyName,
-        entries:     entries,
+        entries: entries,
       );
 
       if (!mounted) return;
@@ -187,12 +189,14 @@ class _MembersScreenState extends State<MembersScreen> {
       await showDialog(
         context: context,
         builder: (_) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Row(
             children: [
               Icon(Icons.picture_as_pdf_rounded, color: AppColors.primary),
               SizedBox(width: 10),
-              Text('Report Ready', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text('Report Ready',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
             ],
           ),
           content: Text(
@@ -222,7 +226,8 @@ class _MembersScreenState extends State<MembersScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
               ),
             ),
           ],
@@ -280,11 +285,13 @@ class _MembersScreenState extends State<MembersScreen> {
                 color: const Color(0xFFD1FAE5),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.check_circle_rounded, color: Color(0xFF059669), size: 22),
+              child: const Icon(Icons.check_circle_rounded,
+                  color: Color(0xFF059669), size: 22),
             ),
             const SizedBox(width: 12),
             const Expanded(
-              child: Text('Resident Added!', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              child: Text('Resident Added!',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             ),
           ],
         ),
@@ -312,7 +319,8 @@ class _MembersScreenState extends State<MembersScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text('Temporary Password',
-                        style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                        style: TextStyle(
+                            fontSize: 11, color: AppColors.textSecondary)),
                     const SizedBox(height: 4),
                     Row(
                       children: [
@@ -328,10 +336,12 @@ class _MembersScreenState extends State<MembersScreen> {
                           ),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.copy_rounded, size: 18, color: AppColors.primary),
+                          icon: const Icon(Icons.copy_rounded,
+                              size: 18, color: AppColors.primary),
                           tooltip: 'Copy password',
                           onPressed: () {
-                            Clipboard.setData(ClipboardData(text: tempPassword));
+                            Clipboard.setData(
+                                ClipboardData(text: tempPassword));
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text('Password copied')),
                             );
@@ -349,15 +359,21 @@ class _MembersScreenState extends State<MembersScreen> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: emailSent ? const Color(0xFFECFDF5) : const Color(0xFFFFF7ED),
+                  color: emailSent
+                      ? const Color(0xFFECFDF5)
+                      : const Color(0xFFFFF7ED),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Icon(
-                      emailSent ? Icons.mark_email_read_outlined : Icons.warning_amber_rounded,
-                      color: emailSent ? const Color(0xFF059669) : const Color(0xFFD97706),
+                      emailSent
+                          ? Icons.mark_email_read_outlined
+                          : Icons.warning_amber_rounded,
+                      color: emailSent
+                          ? const Color(0xFF059669)
+                          : const Color(0xFFD97706),
                       size: 16,
                     ),
                     const SizedBox(width: 8),
@@ -368,7 +384,9 @@ class _MembersScreenState extends State<MembersScreen> {
                             : 'Email could not be sent. Share these credentials manually via WhatsApp or SMS.',
                         style: TextStyle(
                           fontSize: 12,
-                          color: emailSent ? const Color(0xFF065F46) : const Color(0xFF92400E),
+                          color: emailSent
+                              ? const Color(0xFF065F46)
+                              : const Color(0xFF92400E),
                         ),
                       ),
                     ),
@@ -385,13 +403,14 @@ class _MembersScreenState extends State<MembersScreen> {
                   onPressed: () {
                     Clipboard.setData(ClipboardData(
                       text: 'Welcome to the society app!\n'
-                            'Flat: $houseNo\n'
-                            'Email: $email\n'
-                            'Password: $tempPassword\n'
-                            'Tip: Use "Forgot Password" after login to set your own password.',
+                          'Flat: $houseNo\n'
+                          'Email: $email\n'
+                          'Password: $tempPassword\n'
+                          'Tip: Use "Forgot Password" after login to set your own password.',
                     ));
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Credentials copied — ready to share')),
+                      const SnackBar(
+                          content: Text('Credentials copied — ready to share')),
                     );
                   },
                   icon: const Icon(Icons.share_outlined, size: 16),
@@ -399,7 +418,8 @@ class _MembersScreenState extends State<MembersScreen> {
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.primary,
                     side: const BorderSide(color: AppColors.primary),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
               ),
@@ -412,7 +432,8 @@ class _MembersScreenState extends State<MembersScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
             ),
             child: const Text('Done'),
           ),
@@ -433,8 +454,14 @@ class _MembersScreenState extends State<MembersScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                Text(label,
+                    style: const TextStyle(
+                        fontSize: 11, color: AppColors.textSecondary)),
+                Text(value,
+                    style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary)),
               ],
             ),
           ),
@@ -468,7 +495,8 @@ class _MembersScreenState extends State<MembersScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 16,
+              Icon(icon,
+                  size: 16,
                   color: isSelected ? Colors.white : AppColors.textSecondary),
               const SizedBox(width: 6),
               Text(
@@ -488,18 +516,43 @@ class _MembersScreenState extends State<MembersScreen> {
 
   // ── Status chip ────────────────────────────────────────────────────────────
   Widget _statusChip(String? status) {
-    Color bg; Color fg; String label;
+    Color bg;
+    Color fg;
+    String label;
     switch (status) {
-      case 'PAID':    bg = const Color(0xFFD1FAE5); fg = const Color(0xFF065F46); label = 'Paid';    break;
-      case 'PARTIAL': bg = const Color(0xFFFEF3C7); fg = const Color(0xFF92400E); label = 'Partial'; break;
-      case 'SUBMITTED': bg = const Color(0xFFE0E7FF); fg = const Color(0xFF3730A3); label = 'Review'; break;
-      case 'UNPAID':  bg = const Color(0xFFFFE4E6); fg = const Color(0xFF9F1239); label = 'Unpaid';  break;
-      default:        bg = const Color(0xFFF1F5F9); fg = const Color(0xFF64748B); label = 'No Bill'; break;
+      case 'PAID':
+        bg = const Color(0xFFD1FAE5);
+        fg = const Color(0xFF065F46);
+        label = 'Paid';
+        break;
+      case 'PARTIAL':
+        bg = const Color(0xFFFEF3C7);
+        fg = const Color(0xFF92400E);
+        label = 'Partial';
+        break;
+      case 'SUBMITTED':
+        bg = const Color(0xFFE0E7FF);
+        fg = const Color(0xFF3730A3);
+        label = 'Review';
+        break;
+      case 'UNPAID':
+        bg = const Color(0xFFFFE4E6);
+        fg = const Color(0xFF9F1239);
+        label = 'Unpaid';
+        break;
+      default:
+        bg = const Color(0xFFF1F5F9);
+        fg = const Color(0xFF64748B);
+        label = 'No Bill';
+        break;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
-      child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: fg)),
+      decoration:
+          BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
+      child: Text(label,
+          style:
+              TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: fg)),
     );
   }
 
@@ -526,7 +579,8 @@ class _MembersScreenState extends State<MembersScreen> {
               )
             : IconButton(
                 icon: const Icon(Icons.menu_rounded),
-                onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer(),
+                onPressed: () =>
+                    adminDashboardScaffoldKey.currentState?.openDrawer(),
               ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
@@ -539,13 +593,17 @@ class _MembersScreenState extends State<MembersScreen> {
           if (Navigator.canPop(context))
             IconButton(
               icon: const Icon(Icons.menu_rounded),
-              onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer(),
+              onPressed: () =>
+                  adminDashboardScaffoldKey.currentState?.openDrawer(),
             ),
           // Download report
           _generatingReport
               ? const Padding(
                   padding: EdgeInsets.all(12),
-                  child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)),
+                  child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2)),
                 )
               : IconButton(
                   icon: const Icon(Icons.download_rounded),
@@ -568,29 +626,38 @@ class _MembersScreenState extends State<MembersScreen> {
                       child: StreamBuilder<QuerySnapshot>(
                         stream: FirebaseFirestore.instance
                             .collection('users')
-                            .where('role', whereIn: ['user', 'resident'])
-                            .snapshots(),
+                            .where('role',
+                                whereIn: ['user', 'resident']).snapshots(),
                         builder: (_, snap) {
                           final docs = snap.data?.docs ?? [];
                           int ownerCount = 0;
                           int tenantCount = 0;
                           for (final d in docs) {
                             final data = d.data() as Map<String, dynamic>;
-                            if ((data['status']?.toString() ?? 'active') == 'removed') continue;
+                            if ((data['status']?.toString() ?? 'active') ==
+                                'removed') continue;
                             final link = data['account_link'] as Map?;
-                            if (link == null || link['primary_owner_uid'] == null) ownerCount++;
-                            else tenantCount++;
+                            if (link == null ||
+                                link['primary_owner_uid'] == null)
+                              ownerCount++;
+                            else
+                              tenantCount++;
                           }
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
                                 '${ownerCount + tenantCount} Members',
-                                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                                style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textPrimary),
                               ),
                               Text(
                                 '$ownerCount owners · $tenantCount tenants/family',
-                                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textSecondary),
                               ),
                             ],
                           );
@@ -604,8 +671,10 @@ class _MembersScreenState extends State<MembersScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
                         elevation: 0,
                       ),
                     ),
@@ -621,17 +690,24 @@ class _MembersScreenState extends State<MembersScreen> {
                   controller: _searchCtrl,
                   decoration: InputDecoration(
                     hintText: 'Search by name, house no, email or phone',
-                    hintStyle: const TextStyle(fontSize: 13, color: AppColors.textHint),
-                    prefixIcon: const Icon(Icons.search_rounded, color: AppColors.primary, size: 20),
+                    hintStyle: const TextStyle(
+                        fontSize: 13, color: AppColors.textHint),
+                    prefixIcon: const Icon(Icons.search_rounded,
+                        color: AppColors.primary, size: 20),
                     suffixIcon: _searchQuery.isNotEmpty
                         ? IconButton(
-                            icon: const Icon(Icons.clear_rounded, size: 18, color: AppColors.textSecondary),
-                            onPressed: () { _searchCtrl.clear(); setState(() => _searchQuery = ''); },
+                            icon: const Icon(Icons.clear_rounded,
+                                size: 18, color: AppColors.textSecondary),
+                            onPressed: () {
+                              _searchCtrl.clear();
+                              setState(() => _searchQuery = '');
+                            },
                           )
                         : null,
                     filled: true,
                     fillColor: AppColors.background,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: const BorderSide(color: AppColors.border),
@@ -642,7 +718,8 @@ class _MembersScreenState extends State<MembersScreen> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                      borderSide: const BorderSide(
+                          color: AppColors.primary, width: 1.5),
                     ),
                   ),
                 ),
@@ -661,9 +738,11 @@ class _MembersScreenState extends State<MembersScreen> {
                   ),
                   child: Row(
                     children: [
-                      _toggleTab('Owners', Icons.home_rounded, isSelected: _showOwners,
+                      _toggleTab('Owners', Icons.home_rounded,
+                          isSelected: _showOwners,
                           onTap: () => setState(() => _showOwners = true)),
-                      _toggleTab('Others', Icons.people_rounded, isSelected: !_showOwners,
+                      _toggleTab('Others', Icons.people_rounded,
+                          isSelected: !_showOwners,
                           onTap: () => setState(() => _showOwners = false)),
                     ],
                   ),
@@ -686,39 +765,49 @@ class _MembersScreenState extends State<MembersScreen> {
                       for (final doc in invoiceSnap.data!.docs) {
                         final d = doc.data() as Map<String, dynamic>;
                         final houseNo = d['house_no'] as String? ?? '';
-                        if (houseNo.isNotEmpty) statusMap[houseNo] = d['status'] as String? ?? 'UNPAID';
+                        if (houseNo.isNotEmpty)
+                          statusMap[houseNo] =
+                              d['status'] as String? ?? 'UNPAID';
                       }
                     }
 
                     return StreamBuilder<QuerySnapshot>(
                       stream: FirebaseFirestore.instance
                           .collection('users')
-                          .where('role', whereIn: ['user', 'resident'])
-                          .snapshots(),
+                          .where('role',
+                              whereIn: ['user', 'resident']).snapshots(),
                       builder: (_, snap) {
                         if (snap.connectionState == ConnectionState.waiting) {
-                          return const Center(child: CircularProgressIndicator());
+                          return const Center(
+                              child: CircularProgressIndicator());
                         }
 
                         // Filter: removed users, active toggle tab, and search query
                         final allDocs = (snap.data?.docs ?? []).where((d) {
                           final data = d.data() as Map<String, dynamic>;
                           // Exclude removed
-                          if ((data['status']?.toString() ?? 'active') == 'removed') return false;
+                          if ((data['status']?.toString() ?? 'active') ==
+                              'removed') return false;
                           // Apply toggle
-                          final link    = data['account_link'] as Map?;
-                          final isOwner = link == null || link['primary_owner_uid'] == null;
+                          final link = data['account_link'] as Map?;
+                          final isOwner =
+                              link == null || link['primary_owner_uid'] == null;
                           if (_showOwners && !isOwner) return false;
                           if (!_showOwners && isOwner) return false;
                           // Apply search
                           if (_searchQuery.isNotEmpty) {
-                            final name    = (data['name']    ?? '').toString().toLowerCase();
-                            final email   = (data['email']   ?? '').toString().toLowerCase();
-                            final phone   = (data['phone']   ?? '').toString().toLowerCase();
-                            final houseNo = (data['house_no'] ?? '').toString().toLowerCase();
-                            if (!name.contains(_searchQuery)    &&
-                                !email.contains(_searchQuery)   &&
-                                !phone.contains(_searchQuery)   &&
+                            final name =
+                                (data['name'] ?? '').toString().toLowerCase();
+                            final email =
+                                (data['email'] ?? '').toString().toLowerCase();
+                            final phone =
+                                (data['phone'] ?? '').toString().toLowerCase();
+                            final houseNo = (data['house_no'] ?? '')
+                                .toString()
+                                .toLowerCase();
+                            if (!name.contains(_searchQuery) &&
+                                !email.contains(_searchQuery) &&
+                                !phone.contains(_searchQuery) &&
                                 !houseNo.contains(_searchQuery)) return false;
                           }
                           return true;
@@ -731,8 +820,12 @@ class _MembersScreenState extends State<MembersScreen> {
                             final cmp = hA.compareTo(hB);
                             if (cmp != 0) return cmp;
                             // Same house: owner before tenant
-                            final aIsOwner = (da['account_link'] as Map?)?['primary_owner_uid'] == null;
-                            final bIsOwner = (db['account_link'] as Map?)?['primary_owner_uid'] == null;
+                            final aIsOwner = (da['account_link']
+                                    as Map?)?['primary_owner_uid'] ==
+                                null;
+                            final bIsOwner = (db['account_link']
+                                    as Map?)?['primary_owner_uid'] ==
+                                null;
                             if (aIsOwner && !bIsOwner) return -1;
                             if (!aIsOwner && bIsOwner) return 1;
                             return 0;
@@ -745,20 +838,32 @@ class _MembersScreenState extends State<MembersScreen> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
-                                  isSearch ? Icons.search_off_rounded : Icons.people_outline_rounded,
-                                  size: 64, color: AppColors.textHint,
+                                  isSearch
+                                      ? Icons.search_off_rounded
+                                      : Icons.people_outline_rounded,
+                                  size: 64,
+                                  color: AppColors.textHint,
                                 ),
                                 const SizedBox(height: 12),
                                 Text(
-                                  isSearch ? 'No results for "$_searchQuery"'
-                                      : (_showOwners ? 'No owners yet' : 'No tenants / family members yet'),
-                                  style: const TextStyle(fontSize: 16, color: AppColors.textSecondary),
+                                  isSearch
+                                      ? 'No results for "$_searchQuery"'
+                                      : (_showOwners
+                                          ? 'No owners yet'
+                                          : 'No tenants / family members yet'),
+                                  style: const TextStyle(
+                                      fontSize: 16,
+                                      color: AppColors.textSecondary),
                                 ),
                                 const SizedBox(height: 6),
                                 Text(
-                                  isSearch ? 'Try a different name, house no. or email'
-                                      : (_showOwners ? 'Tap "Add Resident" to onboard your first member' : 'Owners can add family/tenants from their Members screen'),
-                                  style: const TextStyle(fontSize: 13, color: AppColors.textHint),
+                                  isSearch
+                                      ? 'Try a different name, house no. or email'
+                                      : (_showOwners
+                                          ? 'Tap "Add Resident" to onboard your first member'
+                                          : 'Owners can add family/tenants from their Members screen'),
+                                  style: const TextStyle(
+                                      fontSize: 13, color: AppColors.textHint),
                                   textAlign: TextAlign.center,
                                 ),
                               ],
@@ -769,22 +874,27 @@ class _MembersScreenState extends State<MembersScreen> {
                         return ListView.separated(
                           padding: const EdgeInsets.all(16),
                           itemCount: allDocs.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 10),
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 10),
                           itemBuilder: (_, i) {
-                            final doc  = allDocs[i];
+                            final doc = allDocs[i];
                             final data = doc.data() as Map<String, dynamic>;
-                            final name      = data['name']?.toString() ?? '—';
-                            final email     = data['email']?.toString() ?? '—';
-                            final phone     = data['phone']?.toString() ?? '—';
-                            final houseNo   = data['house_no']?.toString() ?? '—';
-                            final vehicleNo = (data['vehicle_no'] ?? '').toString().trim();
+                            final name = data['name']?.toString() ?? '—';
+                            final email = data['email']?.toString() ?? '—';
+                            final phone = data['phone']?.toString() ?? '—';
+                            final houseNo = data['house_no']?.toString() ?? '—';
+                            final vehicleNo =
+                                (data['vehicle_no'] ?? '').toString().trim();
                             final invStatus = statusMap[houseNo];
 
                             // Role badge
-                            final link    = data['account_link'] as Map?;
-                            final isOwner = link == null || link['primary_owner_uid'] == null;
-                            final linkedAs = link?['linked_as']?.toString() ?? 'tenant';
-                            final roleLabel = isOwner ? 'Owner'
+                            final link = data['account_link'] as Map?;
+                            final isOwner = link == null ||
+                                link['primary_owner_uid'] == null;
+                            final linkedAs =
+                                link?['linked_as']?.toString() ?? 'tenant';
+                            final roleLabel = isOwner
+                                ? 'Owner'
                                 : '${linkedAs[0].toUpperCase()}${linkedAs.substring(1)}';
                             final roleColor = isOwner
                                 ? const Color(0xFF059669)
@@ -824,61 +934,104 @@ class _MembersScreenState extends State<MembersScreen> {
                                   // Info
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         // Name + role badge on the same row
                                         Row(
                                           children: [
                                             Expanded(
                                               child: Text(name,
-                                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                                                  style: const TextStyle(
+                                                      fontSize: 14,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color: AppColors
+                                                          .textPrimary)),
                                             ),
                                             const SizedBox(width: 6),
                                             Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 3),
                                               decoration: BoxDecoration(
-                                                color: roleColor.withOpacity(0.1),
-                                                borderRadius: BorderRadius.circular(20),
+                                                color:
+                                                    roleColor.withOpacity(0.1),
+                                                borderRadius:
+                                                    BorderRadius.circular(20),
                                               ),
                                               child: Text(
                                                 roleLabel,
-                                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: roleColor),
+                                                style: TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: roleColor),
                                               ),
                                             ),
                                           ],
                                         ),
                                         const SizedBox(height: 2),
-                                        Text(email, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                                        if (phone.isNotEmpty && phone != '—') ...[
+                                        Text(email,
+                                            style: const TextStyle(
+                                                fontSize: 12,
+                                                color:
+                                                    AppColors.textSecondary)),
+                                        if (phone.isNotEmpty &&
+                                            phone != '—') ...[
                                           const SizedBox(height: 1),
-                                          Text(phone, style: const TextStyle(fontSize: 12, color: AppColors.textHint)),
+                                          Text(phone,
+                                              style: const TextStyle(
+                                                  fontSize: 12,
+                                                  color: AppColors.textHint)),
                                         ],
                                         const SizedBox(height: 6),
                                         // Show payment status for owners; for tenants show "Shared flat"
                                         isOwner
                                             ? _statusChip(invStatus)
                                             : Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 3),
                                                 decoration: BoxDecoration(
-                                                  color: const Color(0xFFF3F4F6),
-                                                  borderRadius: BorderRadius.circular(20),
+                                                  color:
+                                                      const Color(0xFFF3F4F6),
+                                                  borderRadius:
+                                                      BorderRadius.circular(20),
                                                 ),
                                                 child: const Text('Shared flat',
-                                                    style: TextStyle(fontSize: 10, color: AppColors.textSecondary, fontWeight: FontWeight.w500)),
+                                                    style: TextStyle(
+                                                        fontSize: 10,
+                                                        color: AppColors
+                                                            .textSecondary,
+                                                        fontWeight:
+                                                            FontWeight.w500)),
                                               ),
                                         // Vehicle number (if set)
                                         if (vehicleNo.isNotEmpty) ...[
                                           const SizedBox(height: 6),
                                           Row(
                                             children: [
-                                              const Icon(Icons.directions_car_rounded, size: 12, color: Color(0xFFF59E0B)),
+                                              const Icon(
+                                                  Icons.directions_car_rounded,
+                                                  size: 12,
+                                                  color: Color(0xFFF59E0B)),
                                               const SizedBox(width: 4),
                                               Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 7,
+                                                        vertical: 2),
                                                 decoration: BoxDecoration(
-                                                  color: const Color(0xFFFEF3C7),
-                                                  borderRadius: BorderRadius.circular(5),
-                                                  border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.4)),
+                                                  color:
+                                                      const Color(0xFFFEF3C7),
+                                                  borderRadius:
+                                                      BorderRadius.circular(5),
+                                                  border: Border.all(
+                                                      color: const Color(
+                                                              0xFFF59E0B)
+                                                          .withOpacity(0.4)),
                                                 ),
                                                 child: Text(
                                                   vehicleNo,
@@ -899,9 +1052,14 @@ class _MembersScreenState extends State<MembersScreen> {
 
                                   // Delete button
                                   IconButton(
-                                    icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error, size: 22),
+                                    icon: const Icon(
+                                        Icons.delete_outline_rounded,
+                                        color: AppColors.error,
+                                        size: 22),
                                     tooltip: 'Remove member',
-                                    onPressed: _deleting ? null : () => _deleteResident(doc.id, name),
+                                    onPressed: _deleting
+                                        ? null
+                                        : () => _deleteResident(doc.id, name),
                                   ),
                                 ],
                               ),
@@ -927,8 +1085,13 @@ class _MembersScreenState extends State<MembersScreen> {
                     const CircularProgressIndicator(color: Colors.white),
                     const SizedBox(height: 12),
                     Text(
-                      _generatingReport ? 'Generating report…' : 'Removing resident…',
-                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                      _generatingReport
+                          ? 'Generating report…'
+                          : 'Removing resident…',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
@@ -963,7 +1126,8 @@ class _MonthPickerDialog extends StatelessWidget {
         child: ListView.separated(
           shrinkWrap: true,
           itemCount: months.length,
-          separatorBuilder: (_, __) => const Divider(height: 1, color: AppColors.border),
+          separatorBuilder: (_, __) =>
+              const Divider(height: 1, color: AppColors.border),
           itemBuilder: (_, i) {
             final m = months[i];
             String label = m;
@@ -974,34 +1138,49 @@ class _MonthPickerDialog extends StatelessWidget {
             }
             final isCurrentMonth = i == 0;
             return ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
               leading: Container(
-                width: 40, height: 40,
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
-                  color: isCurrentMonth ? AppColors.primaryLight : AppColors.background,
+                  color: isCurrentMonth
+                      ? AppColors.primaryLight
+                      : AppColors.background,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
                   Icons.receipt_long_outlined,
-                  color: isCurrentMonth ? AppColors.primary : AppColors.textHint,
+                  color:
+                      isCurrentMonth ? AppColors.primary : AppColors.textHint,
                   size: 20,
                 ),
               ),
-              title: Text(label, style: TextStyle(
-                fontWeight: isCurrentMonth ? FontWeight.bold : FontWeight.normal,
-                color: isCurrentMonth ? AppColors.primary : AppColors.textPrimary,
-                fontSize: 14,
-              )),
+              title: Text(label,
+                  style: TextStyle(
+                    fontWeight:
+                        isCurrentMonth ? FontWeight.bold : FontWeight.normal,
+                    color: isCurrentMonth
+                        ? AppColors.primary
+                        : AppColors.textPrimary,
+                    fontSize: 14,
+                  )),
               trailing: isCurrentMonth
                   ? Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: AppColors.primaryLight,
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: const Text('Current', style: TextStyle(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.w600)),
+                      child: const Text('Current',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w600)),
                     )
-                  : const Icon(Icons.chevron_right_rounded, color: AppColors.textHint),
+                  : const Icon(Icons.chevron_right_rounded,
+                      color: AppColors.textHint),
               onTap: () => Navigator.pop(context, m),
             );
           },
@@ -1028,8 +1207,8 @@ class AddMemberDialog extends StatefulWidget {
 }
 
 class _AddMemberDialogState extends State<AddMemberDialog> {
-  final _formKey  = GlobalKey<FormState>();
-  final _nameCtrl  = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+  final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _houseCtrl = TextEditingController();
@@ -1053,11 +1232,15 @@ class _AddMemberDialogState extends State<AddMemberDialog> {
         children: [
           Container(
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: AppColors.primaryLight, borderRadius: BorderRadius.circular(10)),
-            child: const Icon(Icons.person_add_rounded, color: AppColors.primary, size: 20),
+            decoration: BoxDecoration(
+                color: AppColors.primaryLight,
+                borderRadius: BorderRadius.circular(10)),
+            child: const Icon(Icons.person_add_rounded,
+                color: AppColors.primary, size: 20),
           ),
           const SizedBox(width: 12),
-          const Text('Add New Resident', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const Text('Add New Resident',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         ],
       ),
       content: SizedBox(
@@ -1077,12 +1260,14 @@ class _AddMemberDialogState extends State<AddMemberDialog> {
                   child: const Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.info_outline_rounded, color: AppColors.primary, size: 16),
+                      Icon(Icons.info_outline_rounded,
+                          color: AppColors.primary, size: 16),
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'A login account will be created and a password setup email will be sent to the resident automatically.',
-                          style: TextStyle(color: AppColors.primary, fontSize: 12),
+                          style:
+                              TextStyle(color: AppColors.primary, fontSize: 12),
                         ),
                       ),
                     ],
@@ -1097,10 +1282,13 @@ class _AddMemberDialogState extends State<AddMemberDialog> {
                     labelText: 'Full Name *',
                     prefixIcon: Icon(Icons.person_outline_rounded),
                     border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   ),
                   textCapitalization: TextCapitalization.words,
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Name is required' : null,
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Name is required'
+                      : null,
                 ),
                 const SizedBox(height: 12),
 
@@ -1111,10 +1299,13 @@ class _AddMemberDialogState extends State<AddMemberDialog> {
                     labelText: 'Flat / Unit Number *',
                     prefixIcon: Icon(Icons.home_outlined),
                     border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   ),
                   textCapitalization: TextCapitalization.characters,
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Unit number is required' : null,
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Unit number is required'
+                      : null,
                 ),
                 const SizedBox(height: 12),
 
@@ -1125,11 +1316,13 @@ class _AddMemberDialogState extends State<AddMemberDialog> {
                     labelText: 'Email Address *',
                     prefixIcon: Icon(Icons.email_outlined),
                     border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   ),
                   keyboardType: TextInputType.emailAddress,
                   validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'Email is required';
+                    if (v == null || v.trim().isEmpty)
+                      return 'Email is required';
                     if (!v.contains('@')) return 'Enter a valid email';
                     return null;
                   },
@@ -1143,7 +1336,8 @@ class _AddMemberDialogState extends State<AddMemberDialog> {
                     labelText: 'Phone Number',
                     prefixIcon: Icon(Icons.phone_outlined),
                     border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   ),
                   keyboardType: TextInputType.phone,
                 ),
@@ -1161,9 +1355,9 @@ class _AddMemberDialogState extends State<AddMemberDialog> {
           onPressed: () {
             if (_formKey.currentState!.validate()) {
               Navigator.pop(context, {
-                'name':    _nameCtrl.text.trim(),
-                'email':   _emailCtrl.text.trim(),
-                'phone':   _phoneCtrl.text.trim(),
+                'name': _nameCtrl.text.trim(),
+                'email': _emailCtrl.text.trim(),
+                'phone': _phoneCtrl.text.trim(),
                 'houseNo': _houseCtrl.text.trim().toUpperCase(),
               });
             }
@@ -1173,7 +1367,8 @@ class _AddMemberDialogState extends State<AddMemberDialog> {
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
         ),
       ],

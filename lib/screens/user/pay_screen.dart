@@ -6,18 +6,19 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import 'package:gate_basic/theme/app_theme.dart';
 import '../../utils/dashboard_key.dart';
 import 'receipt_pdf_service.dart';
 
 class UserPayScreen extends StatefulWidget {
   /// When opened from the dashboard due card, these are pre-populated.
-  final String? invoiceId;          // Firestore invoices/{id}
-  final int? prefilledAmount;       // remaining amount to pay
-  final String? monthLabel;         // e.g. "April 2026"
-  final String? invoiceTitle;       // e.g. "Society Painting Q2 2026"
+  final String? invoiceId; // Firestore invoices/{id}
+  final int? prefilledAmount; // remaining amount to pay
+  final String? monthLabel; // e.g. "April 2026"
+  final String? invoiceTitle; // e.g. "Society Painting Q2 2026"
   final String? invoiceDescription; // detail description
-  final String? invoiceType;        // "MAINTENANCE" | "DEMAND"
+  final String? invoiceType; // "MAINTENANCE" | "DEMAND"
 
   const UserPayScreen({
     super.key,
@@ -51,10 +52,8 @@ class _UserPayScreenState extends State<UserPayScreen> {
   @override
   void initState() {
     super.initState();
-    // Pre-fill with invoice amount if coming from a specific due,
-    // otherwise default to 1500.
     amountCtrl = TextEditingController(
-      text: (widget.prefilledAmount ?? 1500).toString(),
+      text: widget.prefilledAmount?.toString() ?? '',
     );
     _loadUser();
   }
@@ -76,8 +75,8 @@ class _UserPayScreenState extends State<UserPayScreen> {
 
   Future<void> _pickProof() async {
     final picker = ImagePicker();
-    final x = await picker.pickImage(
-        source: ImageSource.gallery, imageQuality: 70);
+    final x =
+        await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
     if (x == null) return;
     setState(() => proofImage = File(x.path));
   }
@@ -98,7 +97,8 @@ class _UserPayScreenState extends State<UserPayScreen> {
       final fileBytes = await proofImage!.readAsBytes();
 
       // Upload with metadata and timeout
-      await ref.putData(
+      await ref
+          .putData(
         fileBytes,
         SettableMetadata(
           contentType: 'image/jpeg',
@@ -107,10 +107,12 @@ class _UserPayScreenState extends State<UserPayScreen> {
             'uploadedBy': user!.uid,
           },
         ),
-      ).timeout(
+      )
+          .timeout(
         const Duration(seconds: 30),
         onTimeout: () {
-          throw TimeoutException('Upload took too long (30s). Check internet connection.');
+          throw TimeoutException(
+              'Upload took too long (30s). Check internet connection.');
         },
       );
 
@@ -130,7 +132,8 @@ class _UserPayScreenState extends State<UserPayScreen> {
     // Check file size
     final fileSize = proofImage!.lengthSync();
     if (fileSize > 10 * 1024 * 1024) {
-      _showSnack('Image too large (max 10MB). Please compress and try again.', isError: true);
+      _showSnack('Image too large (max 10MB). Please compress and try again.',
+          isError: true);
       return false;
     }
 
@@ -146,15 +149,49 @@ class _UserPayScreenState extends State<UserPayScreen> {
 
   Future<void> _submitPayment() async {
     if (user == null) return;
-
-    final amount = int.tryParse(amountCtrl.text.trim()) ?? 0;
-    if (amount <= 0) {
-      _showSnack('Enter valid amount', isError: true);
+    if (widget.invoiceId == null) {
+      _showSnack('Select a due before making payment.', isError: true);
       return;
     }
 
-    final utr = txnCtrl.text.trim();
-    if (utr.length < 6) {
+    final invoiceSnap = await FirebaseFirestore.instance
+        .collection('invoices')
+        .doc(widget.invoiceId)
+        .get();
+    if (!invoiceSnap.exists) {
+      _showSnack('This due is no longer available.', isError: true);
+      return;
+    }
+
+    final invoiceData = invoiceSnap.data() ?? {};
+    final invoiceStatus = invoiceData['status']?.toString() ?? 'UNPAID';
+    if (invoiceStatus == 'SUBMITTED') {
+      _showSnack('This due is already under review.', isError: true);
+      return;
+    }
+    if (invoiceStatus == 'PAID') {
+      _showSnack('This due is already paid.', isError: true);
+      return;
+    }
+
+    final invoiceAmount = (invoiceData['amount'] as num?)?.toInt() ?? 0;
+    final paidAmount = (invoiceData['paid_amount'] as num?)?.toInt() ?? 0;
+    final amount = (invoiceAmount - paidAmount).clamp(0, invoiceAmount);
+    amountCtrl.text = amount.toString();
+    if (amount <= 0) {
+      _showSnack('No balance left for this due.', isError: true);
+      return;
+    }
+
+    final isCash = method == 'CASH';
+    final txnValue = txnCtrl.text.trim();
+    if (isCash) {
+      if (txnValue.length < 2) {
+        _showSnack('Enter the name of the person who received the cash.',
+            isError: true);
+        return;
+      }
+    } else if (txnValue.length < 6) {
       _showSnack('Enter valid UTR (min 6 characters)', isError: true);
       return;
     }
@@ -166,11 +203,12 @@ class _UserPayScreenState extends State<UserPayScreen> {
 
     // Resolve house_no for payment submission.
     // Priority: top-level → unit_info.flat_no (= owner's house_no for tenants) → unit_info.house_no
-    final _unitInfo = userData['unit_info'] as Map?;
-    final houseNo = (userData['house_no']
-            ?? _unitInfo?['flat_no']
-            ?? _unitInfo?['house_no']
-            ?? '').toString();
+    final unitInfo = userData['unit_info'] as Map?;
+    final houseNo = (userData['house_no'] ??
+            unitInfo?['flat_no'] ??
+            unitInfo?['house_no'] ??
+            '')
+        .toString();
 
     try {
       // ✅ UPLOAD PROOF FIRST (before creating payment) - Works on mobile & web
@@ -187,7 +225,8 @@ class _UserPayScreenState extends State<UserPayScreen> {
           // Read file as bytes (works on all platforms: mobile & web)
           final fileBytes = await proofImage!.readAsBytes();
 
-          await ref.putData(
+          await ref
+              .putData(
             fileBytes,
             SettableMetadata(
               contentType: 'image/jpeg',
@@ -196,17 +235,21 @@ class _UserPayScreenState extends State<UserPayScreen> {
                 'uploadedBy': user!.uid,
               },
             ),
-          ).timeout(
+          )
+              .timeout(
             const Duration(seconds: 30),
             onTimeout: () {
-              throw TimeoutException('Upload timeout. Check your internet connection.');
+              throw TimeoutException(
+                  'Upload timeout. Check your internet connection.');
             },
           );
 
           proofUrl = await ref.getDownloadURL();
           debugPrint('✅ Proof uploaded successfully: $proofUrl');
-        } on TimeoutException catch (e) {
-          _showSnack('Upload timeout. Please check your internet and try again.', isError: true);
+        } on TimeoutException {
+          _showSnack(
+              'Upload timeout. Please check your internet and try again.',
+              isError: true);
           return;
         } on FirebaseException catch (e) {
           _handleStorageError(e);
@@ -221,24 +264,35 @@ class _UserPayScreenState extends State<UserPayScreen> {
           ? widget.invoiceTitle!
           : (invoiceType == 'DEMAND' ? 'Special Due' : 'Monthly Maintenance');
 
-      // ✅ CREATE PAYMENT WITH PROOF URL INCLUDED (single write)
+      // ✅ CREATE PAYMENT WITH PROOF URL INCLUDED
       final paymentData = {
         'uid': user!.uid,
         'amount': amount,
-        'utr': utr,
+        'utr': isCash ? 'Cash handed to $txnValue' : txnValue,
         'status': 'SUBMITTED',
         'created_at': FieldValue.serverTimestamp(),
         'house_no': houseNo,
         'method': method,
         'note': noteCtrl.text.trim(),
+        if (isCash) 'cash_handed_to': txnValue,
         'invoice_type': invoiceType,
         'purpose': purpose,
-        if (widget.invoiceId != null) 'invoice_id': widget.invoiceId,
-        if (proofUrl != null) 'proof_url': proofUrl,  // ← INCLUDE HERE
+        'invoice_id': widget.invoiceId,
+        if (proofUrl != null) 'proof_url': proofUrl, // ← INCLUDE HERE
       };
 
       debugPrint('🔵 [Payment] Submitting payment data: $paymentData');
-      await FirebaseFirestore.instance.collection('payments').add(paymentData);
+      final db = FirebaseFirestore.instance;
+      final paymentRef = db.collection('payments').doc();
+      final batch = db.batch();
+      batch.set(paymentRef, paymentData);
+      batch.update(db.collection('invoices').doc(widget.invoiceId), {
+        'status': 'SUBMITTED',
+        'submitted_payment_id': paymentRef.id,
+        'submitted_at': FieldValue.serverTimestamp(),
+        'updated_at': FieldValue.serverTimestamp(),
+      });
+      await batch.commit();
       debugPrint('🟢 [Payment] Payment created successfully!');
 
       setState(() => proofImage = null);
@@ -247,11 +301,13 @@ class _UserPayScreenState extends State<UserPayScreen> {
 
       _showSnack('Payment submitted ✅ Waiting for admin verification.');
     } on FirebaseException catch (e) {
-      debugPrint('🔴 [Payment] Firestore error - Code: ${e.code}, Message: ${e.message}');
+      debugPrint(
+          '🔴 [Payment] Firestore error - Code: ${e.code}, Message: ${e.message}');
       String errorMsg = 'Payment submission failed';
       switch (e.code) {
         case 'permission-denied':
-          errorMsg = 'You do not have permission to submit payments. Contact admin.';
+          errorMsg =
+              'You do not have permission to submit payments. Contact admin.';
           break;
         case 'invalid-argument':
           errorMsg = 'Invalid payment data. Check all fields and try again.';
@@ -275,7 +331,8 @@ class _UserPayScreenState extends State<UserPayScreen> {
 
     switch (e.code) {
       case 'permission-denied':
-        errorMsg = 'You do not have permission to upload files. Contact administrator.';
+        errorMsg =
+            'You do not have permission to upload files. Contact administrator.';
         break;
       case 'unauthenticated':
         errorMsg = 'Please log in again to upload proof.';
@@ -284,7 +341,8 @@ class _UserPayScreenState extends State<UserPayScreen> {
         errorMsg = 'Upload was canceled. Please try again.';
         break;
       case 'retry-limit-exceeded':
-        errorMsg = 'Upload failed after multiple retries. Check your connection.';
+        errorMsg =
+            'Upload failed after multiple retries. Check your connection.';
         break;
       default:
         errorMsg = 'Upload error: ${e.code}. ${e.message ?? ""}';
@@ -292,6 +350,305 @@ class _UserPayScreenState extends State<UserPayScreen> {
 
     _showSnack(errorMsg, isError: true);
     debugPrint('🔴 Firebase Storage Error: ${e.code} - ${e.message}');
+  }
+
+  Widget _buildPendingDuesSection(String houseNo) {
+    if (houseNo.isEmpty) {
+      return _emptyState('House number not found. Contact admin.');
+    }
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('invoices')
+          .where('house_no', isEqualTo: houseNo)
+          .where('status',
+              whereIn: ['UNPAID', 'PARTIAL', 'SUBMITTED']).snapshots(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snap.hasError) {
+          return _emptyState('Could not load dues: ${snap.error}');
+        }
+
+        final docs = [...(snap.data?.docs ?? [])];
+        if (docs.isEmpty) {
+          return _allClearCard(houseNo);
+        }
+
+        const order = {'UNPAID': 0, 'PARTIAL': 1, 'SUBMITTED': 2};
+        docs.sort((a, b) {
+          final am = a.data() as Map<String, dynamic>;
+          final bm = b.data() as Map<String, dynamic>;
+          final aOrder = order[am['status']] ?? 3;
+          final bOrder = order[bm['status']] ?? 3;
+          if (aOrder != bOrder) return aOrder.compareTo(bOrder);
+          final aDate = am['due_date'] is Timestamp
+              ? (am['due_date'] as Timestamp).millisecondsSinceEpoch
+              : 0;
+          final bDate = bm['due_date'] is Timestamp
+              ? (bm['due_date'] as Timestamp).millisecondsSinceEpoch
+              : 0;
+          return aDate.compareTo(bDate);
+        });
+
+        return Column(
+          children: docs.map((doc) => _payableDueCard(context, doc)).toList(),
+        );
+      },
+    );
+  }
+
+  Widget _allClearCard(String houseNo) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: AppTheme.successGradient,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.check_circle_rounded, color: Colors.white, size: 34),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'No pending dues',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                Text(
+                  'House $houseNo is all clear.',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.85),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _payableDueCard(BuildContext context, QueryDocumentSnapshot doc) {
+    final inv = doc.data() as Map<String, dynamic>;
+    final status = inv['status']?.toString() ?? 'UNPAID';
+    final type = inv['type']?.toString() ?? 'MAINTENANCE';
+    final title = inv['title']?.toString() ??
+        (type == 'DEMAND' ? 'Special Due' : 'Monthly Maintenance');
+    final desc = inv['description']?.toString() ?? '';
+    final amount = (inv['amount'] as num?)?.toInt() ?? 0;
+    final paidAmt = (inv['paid_amount'] as num?)?.toInt() ?? 0;
+    final remaining = (amount - paidAmt).clamp(0, amount);
+    final rawDate = inv['due_date'];
+    final dueDate = rawDate is Timestamp ? rawDate.toDate() : null;
+    final month = inv['month']?.toString() ?? '';
+    final isDemand = type == 'DEMAND';
+    final isOverdue = dueDate != null &&
+        dueDate.isBefore(DateTime.now()) &&
+        status != 'SUBMITTED';
+
+    final Color accentColor;
+    final List<Color> gradColors;
+    if (status == 'SUBMITTED') {
+      accentColor = AppColors.warning;
+      gradColors = [const Color(0xFFD97706), const Color(0xFFF59E0B)];
+    } else if (isOverdue) {
+      accentColor = AppColors.error;
+      gradColors = [const Color(0xFFDC2626), const Color(0xFFEF4444)];
+    } else if (isDemand) {
+      accentColor = const Color(0xFF8B5CF6);
+      gradColors = [const Color(0xFF7C3AED), const Color(0xFF8B5CF6)];
+    } else {
+      accentColor = AppColors.primary;
+      gradColors = [const Color(0xFF1A56DB), const Color(0xFF3B82F6)];
+    }
+
+    void openPaymentForm() {
+      if (status == 'SUBMITTED') {
+        _showSnack(
+            'This due is already submitted and waiting for admin verification.',
+            isError: true);
+        return;
+      }
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => UserPayScreen(
+            invoiceId: doc.id,
+            prefilledAmount: remaining,
+            monthLabel: isDemand
+                ? title
+                : (month.isNotEmpty
+                    ? DateFormat('MMMM yyyy')
+                        .format(DateTime.parse('$month-01'))
+                    : ''),
+            invoiceTitle: title,
+            invoiceDescription: desc,
+            invoiceType: type,
+          ),
+        ),
+      );
+    }
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: openPaymentForm,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: gradColors,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: accentColor.withOpacity(0.28),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    isDemand ? 'Special Due' : 'Monthly Maintenance',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                if (status == 'SUBMITTED') ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text(
+                      'Under Review',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            if (desc.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                desc,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    color: Colors.white.withOpacity(0.75), fontSize: 12),
+              ),
+            ],
+            if (!isDemand && month.isNotEmpty)
+              Text(
+                DateFormat('MMMM yyyy').format(DateTime.parse('$month-01')),
+                style: TextStyle(
+                    color: Colors.white.withOpacity(0.75), fontSize: 12),
+              ),
+            const SizedBox(height: 14),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '₹${NumberFormat('#,##0').format(remaining)}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          height: 1,
+                        ),
+                      ),
+                      if (paidAmt > 0)
+                        Text(
+                          'of ₹${NumberFormat('#,##0').format(amount)} • ₹${NumberFormat('#,##0').format(paidAmt)} paid',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.75),
+                            fontSize: 11,
+                          ),
+                        ),
+                      if (dueDate != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            '${isOverdue ? 'Was due' : 'Due by'} ${DateFormat('dd MMM yyyy').format(dueDate)}',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.8),
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                if (status != 'SUBMITTED')
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 11),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      status == 'PARTIAL' ? 'Pay Rest' : 'Pay Now',
+                      style: TextStyle(
+                        color: accentColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildInvoiceBanner(String name) {
@@ -310,7 +667,10 @@ class _UserPayScreenState extends State<UserPayScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: gradColors, begin: Alignment.topLeft, end: Alignment.bottomRight),
+        gradient: LinearGradient(
+            colors: gradColors,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight),
         borderRadius: BorderRadius.circular(16),
         boxShadow: AppTheme.primaryShadow,
       ),
@@ -318,23 +678,40 @@ class _UserPayScreenState extends State<UserPayScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 44, height: 44,
-            decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(12)),
-            child: Icon(isDemand ? Icons.request_quote_rounded : Icons.receipt_long_rounded, color: Colors.white, size: 22),
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12)),
+            child: Icon(
+                isDemand
+                    ? Icons.request_quote_rounded
+                    : Icons.receipt_long_rounded,
+                color: Colors.white,
+                size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                Text(title,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15)),
                 if (subtitle.isNotEmpty) ...[
                   const SizedBox(height: 2),
-                  Text(subtitle, style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 12)),
+                  Text(subtitle,
+                      style: TextStyle(
+                          color: Colors.white.withOpacity(0.8), fontSize: 12)),
                 ],
                 const SizedBox(height: 4),
                 Text('₹${widget.prefilledAmount ?? 0} due  •  $name',
-                    style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 12, fontWeight: FontWeight.w500)),
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.85),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500)),
               ],
             ),
           ),
@@ -371,14 +748,16 @@ class _UserPayScreenState extends State<UserPayScreen> {
 
     // Guard: only the account owner can make payments.
     // A user is an owner if account_link is absent OR primary_owner_uid is null.
-    final _accountLink = userData['account_link'] as Map?;
-    final _isOwner = _accountLink == null || _accountLink['primary_owner_uid'] == null;
-    if (!_isOwner) {
+    final accountLink = userData['account_link'] as Map?;
+    final isOwner =
+        accountLink == null || accountLink['primary_owner_uid'] == null;
+    if (!isOwner) {
       return Scaffold(
         backgroundColor: AppColors.background,
         appBar: AppBar(
           title: const Text('Pay Maintenance',
-              style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+              style: TextStyle(
+                  fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
           backgroundColor: Colors.white,
           foregroundColor: AppColors.textPrimary,
           elevation: 0,
@@ -389,13 +768,15 @@ class _UserPayScreenState extends State<UserPayScreen> {
                 )
               : IconButton(
                   icon: const Icon(Icons.menu_rounded),
-                  onPressed: () => dashboardScaffoldKey.currentState?.openDrawer(),
+                  onPressed: () =>
+                      dashboardScaffoldKey.currentState?.openDrawer(),
                 ),
           actions: [
             if (Navigator.canPop(context))
               IconButton(
                 icon: const Icon(Icons.menu_rounded),
-                onPressed: () => dashboardScaffoldKey.currentState?.openDrawer(),
+                onPressed: () =>
+                    dashboardScaffoldKey.currentState?.openDrawer(),
               ),
           ],
         ),
@@ -427,7 +808,8 @@ class _UserPayScreenState extends State<UserPayScreen> {
                 const SizedBox(height: 10),
                 const Text(
                   'Only the primary account holder can pay dues. Please contact the flat owner for payment.',
-                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                  style:
+                      TextStyle(fontSize: 13, color: AppColors.textSecondary),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -439,11 +821,10 @@ class _UserPayScreenState extends State<UserPayScreen> {
 
     final name =
         (userData['name'] ?? userData['username'] ?? 'User').toString();
-    final _ui = userData['unit_info'] as Map?;
-    final flat = (userData['house_no']
-            ?? _ui?['flat_no']
-            ?? _ui?['house_no']
-            ?? '').toString();
+    final ui = userData['unit_info'] as Map?;
+    final flat =
+        (userData['house_no'] ?? ui?['flat_no'] ?? ui?['house_no'] ?? '')
+            .toString();
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -466,7 +847,8 @@ class _UserPayScreenState extends State<UserPayScreen> {
               )
             : IconButton(
                 icon: const Icon(Icons.menu_rounded),
-                onPressed: () => dashboardScaffoldKey.currentState?.openDrawer(),
+                onPressed: () =>
+                    dashboardScaffoldKey.currentState?.openDrawer(),
               ),
         actions: [
           if (Navigator.canPop(context))
@@ -486,184 +868,137 @@ class _UserPayScreenState extends State<UserPayScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // ── Invoice context banner (when opened from a due card) ─
-          if (widget.invoiceId != null) ...[
+          if (widget.invoiceId == null) ...[
+            _sectionTitle('Pending Dues'),
+            const SizedBox(height: 12),
+            _buildPendingDuesSection(flat),
+            const SizedBox(height: 28),
+          ] else ...[
             _buildInvoiceBanner(name),
             const SizedBox(height: 16),
-          ],
-
-          // ── User info banner (when opened standalone) ──────────
-          if (widget.invoiceId == null) ...[
+            _sectionTitle('Payment Details'),
+            const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF1A56DB), Color(0xFF3B82F6)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: AppTheme.primaryShadow,
-              ),
-              child: Row(
+              decoration: AppTheme.cardDecoration,
+              child: Column(
                 children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
+                  TextField(
+                    controller: amountCtrl,
+                    keyboardType: TextInputType.number,
+                    readOnly: true,
+                    decoration: AppTheme.inputDecoration(
+                      'Amount (₹)',
+                      Icons.currency_rupee_rounded,
+                    ).copyWith(
+                      suffixIcon: const Tooltip(
+                        message: 'Amount is fixed by the selected due',
+                        child: Icon(Icons.lock_outline_rounded,
+                            size: 18, color: AppColors.textSecondary),
+                      ),
+                      fillColor: AppColors.divider,
                     ),
-                    child: const Icon(Icons.person_rounded,
-                        color: Colors.white, size: 26),
                   ),
-                  const SizedBox(width: 14),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(name,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16)),
-                      if (flat.isNotEmpty)
-                        Text('Flat: $flat',
-                            style: TextStyle(
-                                color: Colors.white.withOpacity(0.8),
-                                fontSize: 13)),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: method,
+                    items: const [
+                      DropdownMenuItem(value: 'UPI', child: Text('UPI')),
+                      DropdownMenuItem(value: 'CASH', child: Text('Cash')),
+                      DropdownMenuItem(
+                          value: 'BANK_TRANSFER', child: Text('Bank Transfer')),
                     ],
+                    onChanged: (v) => setState(() {
+                      method = v ?? 'UPI';
+                      txnCtrl.clear();
+                    }),
+                    decoration: AppTheme.inputDecoration(
+                        'Payment Method', Icons.payment_rounded),
                   ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: txnCtrl,
+                    textCapitalization: method == 'CASH'
+                        ? TextCapitalization.words
+                        : TextCapitalization.none,
+                    decoration: AppTheme.inputDecoration(
+                      method == 'CASH'
+                          ? 'Handed over to?'
+                          : 'Transaction ID / UTR',
+                      method == 'CASH'
+                          ? Icons.person_outline_rounded
+                          : Icons.tag_rounded,
+                    ),
+                  ),
+                  if (method != 'CASH') ...[
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: noteCtrl,
+                      maxLines: 2,
+                      decoration: AppTheme.inputDecoration(
+                          'Note (optional)', Icons.note_outlined),
+                    ),
+                  ],
                 ],
               ),
             ),
-            const SizedBox(height: 20),
-          ],
-
-          // ── Payment form ──────────────────────────────────────
-          _sectionTitle('Payment Details'),
-          const SizedBox(height: 12),
-
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: AppTheme.cardDecoration,
-            child: Column(
-              children: [
-                TextField(
-                  controller: amountCtrl,
-                  keyboardType: TextInputType.number,
-                  // Lock the field when coming from a specific invoice
-                  readOnly: widget.invoiceId != null,
-                  decoration: AppTheme.inputDecoration(
-                    'Amount (₹)',
-                    Icons.currency_rupee_rounded,
-                  ).copyWith(
-                    suffixIcon: widget.invoiceId != null
-                        ? const Tooltip(
-                            message: 'Amount set by monthly due',
-                            child: Icon(Icons.lock_outline_rounded,
-                                size: 18, color: AppColors.textSecondary),
-                          )
-                        : null,
-                    fillColor: widget.invoiceId != null
-                        ? AppColors.divider
-                        : AppColors.primaryLight,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: method,
-                  items: const [
-                    DropdownMenuItem(value: 'UPI', child: Text('UPI')),
-                    DropdownMenuItem(value: 'CASH', child: Text('Cash')),
-                    DropdownMenuItem(
-                        value: 'BANK_TRANSFER',
-                        child: Text('Bank Transfer')),
-                  ],
-                  onChanged: (v) => setState(() => method = v ?? 'UPI'),
-                  decoration: AppTheme.inputDecoration(
-                      'Payment Method', Icons.payment_rounded),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: txnCtrl,
-                  decoration: AppTheme.inputDecoration(
-                      'Transaction ID / UTR', Icons.tag_rounded),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: noteCtrl,
-                  maxLines: 2,
-                  decoration: AppTheme.inputDecoration(
-                      'Note (optional)', Icons.note_outlined),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // ── Screenshot proof ─────────────────────────────────
-          _sectionTitle('Proof of Payment'),
-          const SizedBox(height: 12),
-
-          OutlinedButton.icon(
-            onPressed: uploadingProof ? null : _pickProof,
-            icon: const Icon(Icons.image_outlined),
-            label: Text(proofImage == null
-                ? 'Attach Payment Screenshot (optional)'
-                : 'Change Screenshot'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.primary,
-              side: const BorderSide(color: AppColors.border),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            ),
-          ),
-
-          if (proofImage != null) ...[
+            const SizedBox(height: 16),
+            _sectionTitle('Proof of Payment'),
             const SizedBox(height: 12),
-            Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.file(proofImage!,
-                      height: 180, fit: BoxFit.cover, width: double.infinity),
-                ),
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: GestureDetector(
-                    onTap: uploadingProof
-                        ? null
-                        : () => setState(() => proofImage = null),
-                    child: Container(
-                      width: 30,
-                      height: 30,
-                      decoration: const BoxDecoration(
-                          color: Colors.black54, shape: BoxShape.circle),
-                      child: const Icon(Icons.close_rounded,
-                          color: Colors.white, size: 18),
+            OutlinedButton.icon(
+              onPressed: uploadingProof ? null : _pickProof,
+              icon: const Icon(Icons.image_outlined),
+              label: Text(proofImage == null
+                  ? 'Attach Payment Screenshot (optional)'
+                  : 'Change Screenshot'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.border),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              ),
+            ),
+            if (proofImage != null) ...[
+              const SizedBox(height: 12),
+              Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.file(proofImage!,
+                        height: 180, fit: BoxFit.cover, width: double.infinity),
+                  ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: GestureDetector(
+                      onTap: uploadingProof
+                          ? null
+                          : () => setState(() => proofImage = null),
+                      child: Container(
+                        width: 30,
+                        height: 30,
+                        decoration: const BoxDecoration(
+                            color: Colors.black54, shape: BoxShape.circle),
+                        child: const Icon(Icons.close_rounded,
+                            color: Colors.white, size: 18),
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
+            ],
+            const SizedBox(height: 20),
+            AppTheme.gradientButton(
+              label:
+                  uploadingProof ? 'Uploading...' : 'Submit for Verification',
+              onTap: uploadingProof ? null : _submitPayment,
+              height: 52,
+              icon: Icons.send_rounded,
             ),
+            const SizedBox(height: 28),
           ],
-
-          const SizedBox(height: 20),
-
-          // ── Submit button ─────────────────────────────────────
-          AppTheme.gradientButton(
-            label: uploadingProof
-                ? 'Uploading...'
-                : 'Submit for Verification',
-            onTap: uploadingProof ? null : _submitPayment,
-            height: 52,
-            icon: Icons.send_rounded,
-          ),
-
-          const SizedBox(height: 28),
 
           // ── Payment history ──────────────────────────────────
           _sectionTitle('My Payments'),
@@ -691,8 +1026,7 @@ class _UserPayScreenState extends State<UserPayScreen> {
                   children: docs.asMap().entries.map((entry) {
                     final i = entry.key;
                     final m = entry.value.data() as Map<String, dynamic>;
-                    final status =
-                        (m['status'] ?? 'PENDING').toString();
+                    final status = (m['status'] ?? 'PENDING').toString();
                     final statusColor = _payStatusColor(status);
 
                     return Column(
@@ -706,10 +1040,8 @@ class _UserPayScreenState extends State<UserPayScreen> {
                                 width: 40,
                                 height: 40,
                                 decoration: BoxDecoration(
-                                  color:
-                                      statusColor.withOpacity(0.12),
-                                  borderRadius:
-                                      BorderRadius.circular(10),
+                                  color: statusColor.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Icon(
                                   status == 'VERIFIED'
@@ -724,8 +1056,7 @@ class _UserPayScreenState extends State<UserPayScreen> {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
                                       '₹${m["amount"] ?? 0}',
@@ -748,8 +1079,7 @@ class _UserPayScreenState extends State<UserPayScreen> {
                           ),
                         ),
                         if (i < docs.length - 1)
-                          const Divider(
-                              height: 1, color: AppColors.divider),
+                          const Divider(height: 1, color: AppColors.divider),
                       ],
                     );
                   }).toList(),
@@ -800,8 +1130,7 @@ class _UserPayScreenState extends State<UserPayScreen> {
                                 height: 40,
                                 decoration: BoxDecoration(
                                   color: AppColors.successLight,
-                                  borderRadius:
-                                      BorderRadius.circular(10),
+                                  borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: const Icon(Icons.receipt_rounded,
                                     color: AppColors.success, size: 20),
@@ -809,8 +1138,7 @@ class _UserPayScreenState extends State<UserPayScreen> {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
                                       '₹${r["amount"] ?? 0}  •  ${r["status"] ?? "VERIFIED"}',
@@ -832,9 +1160,8 @@ class _UserPayScreenState extends State<UserPayScreen> {
                                 icon: const Icon(Icons.picture_as_pdf_rounded,
                                     color: AppColors.error),
                                 onPressed: () async {
-                                  final file =
-                                      await ReceiptPdfService
-                                          .generateReceiptPdf(
+                                  final file = await ReceiptPdfService
+                                      .generateReceiptPdf(
                                     receiptId: entry.value.id,
                                     r: r,
                                   );
@@ -845,8 +1172,7 @@ class _UserPayScreenState extends State<UserPayScreen> {
                           ),
                         ),
                         if (i < docs.length - 1)
-                          const Divider(
-                              height: 1, color: AppColors.divider),
+                          const Divider(height: 1, color: AppColors.divider),
                       ],
                     );
                   }).toList(),
