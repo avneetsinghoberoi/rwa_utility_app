@@ -10,6 +10,7 @@ import 'admin_pay_screen.dart';
 import 'admin_issues.dart';
 import 'admin_expense.dart';
 import 'admin_notices.dart';
+import 'admin_polls_screen.dart';
 import 'admin_reports_screen.dart';
 import '../login/login_screen.dart';
 
@@ -36,7 +37,7 @@ class AdminDashboard extends StatefulWidget {
 }
 
 class _AdminDashboardState extends State<AdminDashboard> {
-  int _selectedIndex = 7;
+  int _selectedIndex = 8;
 
   static const List<_NavItem> _navItems = [
     _NavItem(
@@ -80,6 +81,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
       icon: Icons.notifications_outlined,
       selectedIcon: Icons.notifications_rounded,
       screen: AdminNoticesScreen(),
+    ),
+    _NavItem(
+      label: 'Polls',
+      icon: Icons.how_to_vote_outlined,
+      selectedIcon: Icons.how_to_vote_rounded,
+      screen: AdminPollsScreen(),
     ),
     _NavItem(
       label: 'Reports',

@@ -11,6 +11,7 @@ import 'notices_screen.dart';
 import 'expense_screen.dart';
 import 'user_profile_screen.dart';
 import 'directory_screen.dart';
+import 'polls_screen.dart';
 
 class UserHomeScreen extends StatefulWidget {
   final Map<String, dynamic> userData;
@@ -67,6 +68,12 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
           label: 'Expenses',
           color: AppColors.warning,
           screen: const ExpenseScreen(),
+        ),
+        _QuickItem(
+          icon: Icons.how_to_vote_rounded,
+          label: 'Polls',
+          color: const Color(0xFF10B981),
+          screen: const PollsScreen(),
         ),
       ];
 

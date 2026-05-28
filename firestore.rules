@@ -378,5 +378,48 @@ service cloud.firestore {
                        isAdmin(request.auth.uid);
     }
 
+    // ============================================================================
+    // POLLS COLLECTION
+    // ============================================================================
+
+    match /polls/{pollId} {
+      // All authenticated users can read polls
+      allow read: if request.auth.uid != null;
+
+      // Only admin can create polls
+      allow create: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
+      // Only admin can update poll (close it, edit title/description, etc.)
+      allow update: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
+      // Only admin can delete polls
+      allow delete: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
+      // ── Votes subcollection ─────────────────────────────────────────────
+      match /votes/{voterId} {
+        // Admin can read all votes
+        allow read: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+
+        // Voter can read their own vote
+        allow read: if request.auth.uid == voterId;
+
+        // Authenticated active residents can cast a vote (document ID = their UID).
+        // The transaction in the app prevents double voting, but we also enforce
+        // here that the voter can only create a document for themselves.
+        allow create: if request.auth.uid != null &&
+                         request.auth.uid == voterId &&
+                         isActiveUser(request.auth.uid) &&
+                         isResidentUser(request.auth.uid);
+
+        // Votes are immutable once cast
+        allow update: if false;
+        allow delete: if false;
+      }
+    }
+
   }
 }
