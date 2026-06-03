@@ -65,6 +65,7 @@ class _MembersScreenState extends State<MembersScreen> {
         'email': data['email'],
         'phone': data['phone'],
         'houseNo': data['houseNo'],
+        'propertyType': data['propertyType'] ?? 'flat',
       }),
     );
 
@@ -887,6 +888,11 @@ class _MembersScreenState extends State<MembersScreen> {
                                 (data['vehicle_no'] ?? '').toString().trim();
                             final invStatus = statusMap[houseNo];
 
+                            // Property type badge
+                            final propertyType =
+                                data['property_type']?.toString() ?? 'flat';
+                            final isHouse = propertyType == 'house';
+
                             // Role badge
                             final link = data['account_link'] as Map?;
                             final isOwner = link == null ||
@@ -967,6 +973,53 @@ class _MembersScreenState extends State<MembersScreen> {
                                                     fontSize: 10,
                                                     fontWeight: FontWeight.w700,
                                                     color: roleColor),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 7,
+                                                      vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: isHouse
+                                                    ? const Color(0xFF059669)
+                                                        .withOpacity(0.1)
+                                                    : AppColors.primary
+                                                        .withOpacity(0.1),
+                                                borderRadius:
+                                                    BorderRadius.circular(20),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    isHouse
+                                                        ? Icons.house_rounded
+                                                        : Icons
+                                                            .apartment_rounded,
+                                                    size: 10,
+                                                    color: isHouse
+                                                        ? const Color(
+                                                            0xFF059669)
+                                                        : AppColors.primary,
+                                                  ),
+                                                  const SizedBox(width: 3),
+                                                  Text(
+                                                    isHouse
+                                                        ? 'House'
+                                                        : 'Flat',
+                                                    style: TextStyle(
+                                                        fontSize: 10,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: isHouse
+                                                            ? const Color(
+                                                                0xFF059669)
+                                                            : AppColors
+                                                                .primary),
+                                                  ),
+                                                ],
                                               ),
                                             ),
                                           ],
@@ -1212,6 +1265,7 @@ class _AddMemberDialogState extends State<AddMemberDialog> {
   final _emailCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _houseCtrl = TextEditingController();
+  String _propertyType = 'flat'; // 'flat' | 'house'
 
   @override
   void dispose() {
@@ -1341,6 +1395,115 @@ class _AddMemberDialogState extends State<AddMemberDialog> {
                   ),
                   keyboardType: TextInputType.phone,
                 ),
+                const SizedBox(height: 12),
+
+                // Property Type
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Property Type *',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textSecondary),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () =>
+                                setState(() => _propertyType = 'flat'),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 12),
+                              decoration: BoxDecoration(
+                                color: _propertyType == 'flat'
+                                    ? AppColors.primary
+                                    : AppColors.gray50,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: _propertyType == 'flat'
+                                      ? AppColors.primary
+                                      : AppColors.border,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.apartment_rounded,
+                                      size: 16,
+                                      color: _propertyType == 'flat'
+                                          ? Colors.white
+                                          : AppColors.textSecondary),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Flat',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                      color: _propertyType == 'flat'
+                                          ? Colors.white
+                                          : AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () =>
+                                setState(() => _propertyType = 'house'),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 12),
+                              decoration: BoxDecoration(
+                                color: _propertyType == 'house'
+                                    ? const Color(0xFF059669)
+                                    : AppColors.gray50,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: _propertyType == 'house'
+                                      ? const Color(0xFF059669)
+                                      : AppColors.border,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.house_rounded,
+                                      size: 16,
+                                      color: _propertyType == 'house'
+                                          ? Colors.white
+                                          : AppColors.textSecondary),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Indep. House',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                      color: _propertyType == 'house'
+                                          ? Colors.white
+                                          : AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -1359,6 +1522,7 @@ class _AddMemberDialogState extends State<AddMemberDialog> {
                 'email': _emailCtrl.text.trim(),
                 'phone': _phoneCtrl.text.trim(),
                 'houseNo': _houseCtrl.text.trim().toUpperCase(),
+                'propertyType': _propertyType,
               });
             }
           },

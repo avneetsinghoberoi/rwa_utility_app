@@ -1,13 +1,91 @@
-import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:gate_basic/theme/app_theme.dart';
 import 'package:gate_basic/utils/admin_dashboard_key.dart';
+
+// ════════════════════════════════════════════════════════════════════════════
+// DATA MODELS
+// ════════════════════════════════════════════════════════════════════════════
+
+class _DueGroup {
+  final String id;
+  final String title;
+  final String type; // 'DEMAND' | 'MAINTENANCE'
+  final DateTime sortDate;
+
+  int totalBilled    = 0;
+  int totalCollected = 0;
+  int paidCount      = 0;
+  int partialCount   = 0;
+  int unpaidCount    = 0;
+
+  int    get totalOutstanding => totalBilled - totalCollected;
+  int    get invoiceCount     => paidCount + partialCount + unpaidCount;
+  double get collectionRate   => totalBilled > 0 ? totalCollected / totalBilled : 0;
+
+  _DueGroup({required this.id, required this.title, required this.type, required this.sortDate});
+}
+
+class _InvoiceSummary {
+  final String invoiceId;
+  final String status;
+  final int    amount;
+  final int    paidAmount;
+
+  int  get balance   => (amount - paidAmount).clamp(0, amount);
+  bool get isPaid    => status == 'PAID';
+  bool get isPartial => status == 'PARTIAL';
+  bool get isUnpaid  => status == 'UNPAID' || status == 'SUBMITTED';
+
+  const _InvoiceSummary({required this.invoiceId, required this.status, required this.amount, required this.paidAmount});
+}
+
+class _MemberRow {
+  final String uid;
+  final String houseNo;
+  final String name;
+  final String propertyType;
+  final Map<String, _InvoiceSummary> byGroup;
+
+  _MemberRow({required this.uid, required this.houseNo, required this.name, required this.propertyType, required this.byGroup});
+
+  int  get totalBilled  => byGroup.values.fold(0, (s, i) => s + i.amount);
+  int  get totalPaid    => byGroup.values.fold(0, (s, i) => s + i.paidAmount);
+  int  get totalBalance => (totalBilled - totalPaid).clamp(0, totalBilled);
+  bool get isFullyClear => byGroup.values.every((i) => i.isPaid);
+  bool get hasAnyUnpaid => byGroup.values.any((i) => i.isUnpaid);
+
+  String get overallStatus {
+    if (isFullyClear) return 'CLEAR';
+    if (hasAnyUnpaid) return 'DEFAULTER';
+    return 'PARTIAL';
+  }
+}
+
+class _SheetData {
+  final List<_DueGroup>  groups;
+  final List<_MemberRow> members;
+
+  const _SheetData({required this.groups, required this.members});
+
+  int get totalBilled    => members.fold(0, (s, m) => s + m.totalBilled);
+  int get totalCollected => members.fold(0, (s, m) => s + m.totalPaid);
+  int get totalBalance   => (totalBilled - totalCollected).clamp(0, totalBilled);
+  int get clearCount     => members.where((m) => m.isFullyClear).length;
+  int get defaulterCount => members.where((m) => m.hasAnyUnpaid).length;
+  int get partialCount   => members.where((m) => !m.isFullyClear && !m.hasAnyUnpaid).length;
+
+  List<_MemberRow> get defaulters => members.where((m) => m.hasAnyUnpaid).toList();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MAIN SCREEN
+// ════════════════════════════════════════════════════════════════════════════
 
 class AdminDuesSheetScreen extends StatefulWidget {
   const AdminDuesSheetScreen({super.key});
@@ -18,15 +96,14 @@ class AdminDuesSheetScreen extends StatefulWidget {
 
 class _AdminDuesSheetScreenState extends State<AdminDuesSheetScreen>
     with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
-  late Future<_DuesSheetData> _future;
-  String? _selectedPdfMonth;
+  late TabController _tabController;
+  late Future<_SheetData> _future;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-    _future = _loadSheetData();
+    _tabController = TabController(length: 4, vsync: this);
+    _future = _loadData();
   }
 
   @override
@@ -35,231 +112,211 @@ class _AdminDuesSheetScreenState extends State<AdminDuesSheetScreen>
     super.dispose();
   }
 
-  Future<_DuesSheetData> _loadSheetData() async {
+  Future<_SheetData> _loadData() async {
     final db = FirebaseFirestore.instance;
     final results = await Future.wait([
+      db.collection('users').where('role', isEqualTo: 'user').get(),
       db.collection('invoices').get(),
       db.collection('demand_dues').get(),
     ]);
 
-    final invoiceDocs = results[0].docs;
-    final demandDocs = results[1].docs;
+    final userDocs    = results[0].docs;
+    final invoiceDocs = results[1].docs;
+    final demandDocs  = results[2].docs;
 
-    final demandsById = <String, Map<String, dynamic>>{
-      for (final doc in demandDocs) doc.id: doc.data(),
+    final demandMeta = <String, Map<String, dynamic>>{
+      for (final d in demandDocs) d.id: d.data(),
     };
-    final groupsByKey = <String, _DueGroup>{};
 
-    for (final doc in invoiceDocs) {
-      final data = doc.data();
-      final row = _InvoiceRow.fromDoc(doc.id, data);
-      final groupKey = row.groupKey;
+    final groupMap  = <String, _DueGroup>{};
+    final memberMap = <String, _MemberRow>{};
 
-      groupsByKey
-          .putIfAbsent(groupKey, () {
-            if (row.isDemand) {
-              final demand = demandsById[row.demandId] ?? {};
-              return _DueGroup(
-                id: groupKey,
-                title: demand['title']?.toString() ??
-                    row.title.ifBlank('Demand Due'),
-                subtitle: demand['description']?.toString() ?? row.description,
-                type: 'DEMAND',
-                status: demand['status']?.toString() ?? 'UNKNOWN',
-                sortDate: _dateFromTimestamp(demand['created_at']) ??
-                    _dateFromTimestamp(row.createdAt) ??
-                    DateTime.fromMillisecondsSinceEpoch(0),
-              );
-            }
-
-            return _DueGroup(
-              id: groupKey,
-              title: row.monthLabel,
-              subtitle: 'Monthly maintenance',
-              type: 'MAINTENANCE',
-              status: 'MONTHLY',
-              sortDate: _monthDate(row.month),
-            );
-          })
-          .rows
-          .add(row);
+    for (final u in userDocs) {
+      final d = u.data();
+      memberMap[u.id] = _MemberRow(
+        uid:          u.id,
+        houseNo:      d['house_no']?.toString()      ?? '-',
+        name:         d['name']?.toString()          ?? 'Unknown',
+        propertyType: d['property_type']?.toString() ?? 'flat',
+        byGroup:      {},
+      );
     }
 
-    final groups = groupsByKey.values.toList()
-      ..sort((a, b) => b.sortDate.compareTo(a.sortDate));
+    for (final inv in invoiceDocs) {
+      final d      = inv.data();
+      final uid    = d['uid']?.toString()       ?? '';
+      final type   = d['type']?.toString()      ?? 'MAINTENANCE';
+      final status = d['status']?.toString()    ?? 'UNPAID';
+      final amount = (d['amount']    as num?)?.toInt() ?? 0;
+      final paid   = (d['paid_amount'] as num?)?.toInt() ?? 0;
+      final month  = d['month']?.toString()     ?? '';
+      final demId  = d['demand_id']?.toString() ?? '';
 
-    return _DuesSheetData(groups: groups);
+      final String groupId;
+      final String groupTitle;
+      final String groupType;
+      final DateTime groupDate;
+
+      if (type == 'DEMAND' && demId.isNotEmpty) {
+        groupId    = demId;
+        final meta = demandMeta[demId] ?? {};
+        groupTitle = meta['title']?.toString() ?? d['title']?.toString() ?? 'Special Due';
+        groupType  = 'DEMAND';
+        groupDate  = meta['created_at'] is Timestamp
+            ? (meta['created_at'] as Timestamp).toDate()
+            : DateTime.now();
+      } else if (month.isNotEmpty) {
+        groupId    = month;
+        groupTitle = _monthLabel(month);
+        groupType  = 'MAINTENANCE';
+        groupDate  = _monthDate(month);
+      } else {
+        continue;
+      }
+
+      groupMap.putIfAbsent(groupId,
+          () => _DueGroup(id: groupId, title: groupTitle, type: groupType, sortDate: groupDate));
+
+      final group = groupMap[groupId]!;
+      group.totalBilled    += amount;
+      group.totalCollected += paid;
+      if (status == 'PAID')         group.paidCount++;
+      else if (status == 'PARTIAL') group.partialCount++;
+      else                          group.unpaidCount++;
+
+      if (memberMap.containsKey(uid)) {
+        memberMap[uid]!.byGroup[groupId] = _InvoiceSummary(
+            invoiceId: inv.id, status: status, amount: amount, paidAmount: paid);
+      }
+    }
+
+    final groups  = groupMap.values.toList()..sort((a, b) => b.sortDate.compareTo(a.sortDate));
+    final members = memberMap.values.toList()..sort((a, b) => a.houseNo.compareTo(b.houseNo));
+    return _SheetData(groups: groups, members: members);
   }
 
-  static DateTime? _dateFromTimestamp(Object? value) {
-    if (value is Timestamp) return value.toDate();
-    return null;
+  static String _monthLabel(String month) {
+    try { return DateFormat('MMM yyyy').format(DateTime.parse('$month-01')); }
+    catch (_) { return month; }
   }
 
   static DateTime _monthDate(String month) {
-    try {
-      return DateTime.parse('$month-01');
-    } catch (_) {
-      return DateTime.fromMillisecondsSinceEpoch(0);
-    }
+    try { return DateTime.parse('$month-01'); }
+    catch (_) { return DateTime.fromMillisecondsSinceEpoch(0); }
   }
 
-  void _refresh() {
-    setState(() {
-      _future = _loadSheetData();
+  // ── CSV export helpers ───────────────────────────────────────────────────
+  Future<void> _writeCsv(String filename, List<List<String>> rows) async {
+    final csv = rows
+        .map((r) => r.map((c) => '"${c.replaceAll('"', '""')}"').join(','))
+        .join('\n');
+    final dir  = await getApplicationDocumentsDirectory();
+    final file = File('${dir.path}/$filename');
+    await file.writeAsString(csv);
+    await OpenFilex.open(file.path);
+  }
+
+  Future<void> _exportLedger(_SheetData data) async {
+    await _writeCsv('member_ledger.csv', [
+      ['Flat No', 'Name', 'Property Type', 'Total Billed', 'Total Paid', 'Outstanding', 'Status'],
+      ...data.members.map((m) => [
+        m.houseNo, m.name,
+        m.propertyType == 'house' ? 'Indep. House' : 'Flat',
+        m.totalBilled.toString(), m.totalPaid.toString(),
+        m.totalBalance.toString(), m.overallStatus,
+      ]),
+    ]);
+  }
+
+  Future<void> _exportDue(_SheetData data, _DueGroup g) async {
+    final rows = data.members.where((m) => m.byGroup.containsKey(g.id)).map((m) {
+      final inv = m.byGroup[g.id]!;
+      return [m.houseNo, m.name, m.propertyType == 'house' ? 'Indep. House' : 'Flat',
+        inv.amount.toString(), inv.paidAmount.toString(), inv.balance.toString(), inv.status];
     });
+    await _writeCsv('due_${g.id}.csv', [
+      ['Flat No', 'Name', 'Property Type', 'Amount', 'Paid', 'Balance', 'Status'],
+      ...rows,
+    ]);
   }
 
-  String _fmt(num value) => '₹${NumberFormat('#,##0').format(value)}';
-
-  Future<void> _printDefaultersPdf(_DuesSheetData data,
-      {String? monthKey}) async {
-    try {
-      final bytes = await _DefaultersPdfBuilder.build(data, monthKey: monthKey);
-      final suffix = monthKey ?? 'overall';
-      await Printing.layoutPdf(
-        name: 'defaulters_dues_sheet_$suffix.pdf',
-        onLayout: (_) async => bytes,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not print PDF: $e'),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
+  Future<void> _exportDefaulters(_SheetData data, String? gid) async {
+    final list = gid == null
+        ? data.defaulters
+        : data.members.where((m) { final i = m.byGroup[gid]; return i != null && i.isUnpaid; }).toList();
+    await _writeCsv('defaulters.csv', [
+      ['Flat No', 'Name', 'Property Type', 'Outstanding', 'Status'],
+      ...list.map((m) => [m.houseNo, m.name, m.propertyType == 'house' ? 'Indep. House' : 'Flat',
+        m.totalBalance.toString(), m.overallStatus]),
+    ]);
   }
 
-  Future<void> _shareDefaultersPdf(_DuesSheetData data,
-      {String? monthKey}) async {
-    try {
-      final bytes = await _DefaultersPdfBuilder.build(data, monthKey: monthKey);
-      final suffix = monthKey ?? 'overall';
-      await Printing.sharePdf(
-        bytes: bytes,
-        filename: 'defaulters_dues_sheet_$suffix.pdf',
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not share PDF: $e'),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
-  }
+  void _refresh() => setState(() => _future = _loadData());
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text(
-          'Dues Sheet',
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-            color: AppColors.textPrimary,
-          ),
-        ),
         backgroundColor: Colors.white,
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
         surfaceTintColor: Colors.white,
         leading: Navigator.canPop(context)
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back_rounded),
-                onPressed: () => Navigator.pop(context),
-              )
-            : IconButton(
-                icon: const Icon(Icons.menu_rounded),
-                onPressed: () =>
-                    adminDashboardScaffoldKey.currentState?.openDrawer(),
-              ),
+            ? IconButton(icon: const Icon(Icons.arrow_back_rounded), onPressed: () => Navigator.pop(context))
+            : IconButton(icon: const Icon(Icons.menu_rounded), onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer()),
         actions: [
           if (Navigator.canPop(context))
-            IconButton(
-              icon: const Icon(Icons.menu_rounded),
-              onPressed: () =>
-                  adminDashboardScaffoldKey.currentState?.openDrawer(),
-            ),
-          IconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: _refresh,
-          ),
+            IconButton(icon: const Icon(Icons.menu_rounded), onPressed: () => adminDashboardScaffoldKey.currentState?.openDrawer()),
+          IconButton(tooltip: 'Refresh', icon: const Icon(Icons.refresh_rounded), onPressed: _refresh),
         ],
+        title: const Text('Dues Report', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
         bottom: TabBar(
           controller: _tabController,
           labelColor: AppColors.primary,
           unselectedLabelColor: AppColors.textSecondary,
           indicatorColor: AppColors.primary,
+          labelStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
           tabs: const [
-            Tab(icon: Icon(Icons.dashboard_outlined), text: 'Summary'),
-            Tab(icon: Icon(Icons.table_chart_outlined), text: 'Dues'),
-            Tab(icon: Icon(Icons.person_off_outlined), text: 'Unpaid'),
+            Tab(icon: Icon(Icons.dashboard_outlined, size: 18), text: 'Overview'),
+            Tab(icon: Icon(Icons.people_alt_outlined, size: 18), text: 'Ledger'),
+            Tab(icon: Icon(Icons.receipt_long_outlined, size: 18), text: 'Per Due'),
+            Tab(icon: Icon(Icons.person_off_outlined, size: 18), text: 'Defaulters'),
           ],
         ),
       ),
-      body: FutureBuilder<_DuesSheetData>(
+      body: FutureBuilder<_SheetData>(
         future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+        builder: (context, snap) {
+          if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (snapshot.hasError) {
-            return _ErrorState(message: snapshot.error.toString());
+          if (snap.hasError) {
+            return Center(child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.error_outline_rounded, size: 48, color: AppColors.error),
+                const SizedBox(height: 12),
+                Text(snap.error.toString(), textAlign: TextAlign.center,
+                    style: const TextStyle(color: AppColors.textSecondary)),
+              ]),
+            ));
           }
-          final data = snapshot.data ?? const _DuesSheetData(groups: []);
+          final data = snap.data!;
           if (data.groups.isEmpty) {
-            return const _EmptyState();
+            return const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.inbox_outlined, size: 52, color: AppColors.textHint),
+              SizedBox(height: 12),
+              Text('No dues generated yet.', style: TextStyle(color: AppColors.textSecondary)),
+            ]));
           }
-          final monthKeys = data.monthKeys;
-          final selectedMonth = monthKeys.contains(_selectedPdfMonth)
-              ? _selectedPdfMonth
-              : (monthKeys.isNotEmpty ? monthKeys.first : null);
-
           return TabBarView(
             controller: _tabController,
             children: [
-              _SummaryTab(
-                data: data,
-                fmt: _fmt,
-                selectedMonth: selectedMonth,
-                monthKeys: monthKeys,
-                onMonthChanged: (value) =>
-                    setState(() => _selectedPdfMonth = value),
-                onPrintOverall: () => _printDefaultersPdf(data),
-                onShareOverall: () => _shareDefaultersPdf(data),
-                onPrintMonth: selectedMonth == null
-                    ? null
-                    : () => _printDefaultersPdf(data, monthKey: selectedMonth),
-                onShareMonth: selectedMonth == null
-                    ? null
-                    : () => _shareDefaultersPdf(data, monthKey: selectedMonth),
-              ),
-              _DuesTab(data: data, fmt: _fmt),
-              _UnpaidTab(
-                data: data,
-                fmt: _fmt,
-                selectedMonth: selectedMonth,
-                monthKeys: monthKeys,
-                onMonthChanged: (value) =>
-                    setState(() => _selectedPdfMonth = value),
-                onPrintOverall: () => _printDefaultersPdf(data),
-                onShareOverall: () => _shareDefaultersPdf(data),
-                onPrintMonth: selectedMonth == null
-                    ? null
-                    : () => _printDefaultersPdf(data, monthKey: selectedMonth),
-                onShareMonth: selectedMonth == null
-                    ? null
-                    : () => _shareDefaultersPdf(data, monthKey: selectedMonth),
-              ),
+              _OverviewTab(data: data),
+              _LedgerTab(data: data, onExport: () => _exportLedger(data)),
+              _PerDueTab(data: data, onExport: (g) => _exportDue(data, g)),
+              _DefaultersTab(data: data, onExport: (gid) => _exportDefaulters(data, gid)),
             ],
           );
         },
@@ -268,1387 +325,754 @@ class _AdminDuesSheetScreenState extends State<AdminDuesSheetScreen>
   }
 }
 
-class _SummaryTab extends StatelessWidget {
-  final _DuesSheetData data;
-  final String Function(num value) fmt;
-  final String? selectedMonth;
-  final List<String> monthKeys;
-  final ValueChanged<String?> onMonthChanged;
-  final VoidCallback onPrintOverall;
-  final VoidCallback onShareOverall;
-  final VoidCallback? onPrintMonth;
-  final VoidCallback? onShareMonth;
+// ════════════════════════════════════════════════════════════════════════════
+// TAB 1 — OVERVIEW
+// ════════════════════════════════════════════════════════════════════════════
 
-  const _SummaryTab({
-    required this.data,
-    required this.fmt,
-    required this.selectedMonth,
-    required this.monthKeys,
-    required this.onMonthChanged,
-    required this.onPrintOverall,
-    required this.onShareOverall,
-    required this.onPrintMonth,
-    required this.onShareMonth,
-  });
+class _OverviewTab extends StatelessWidget {
+  final _SheetData data;
+  const _OverviewTab({required this.data});
+
+  String _fmt(int v) => '₹${NumberFormat('#,##0').format(v)}';
 
   @override
   Widget build(BuildContext context) {
-    final topUnpaid = data.unpaidRows.take(8).toList();
-
+    final rate = data.totalBilled > 0 ? data.totalCollected / data.totalBilled : 0.0;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        _SectionLabel('Financial Summary'),
+        const SizedBox(height: 10),
         GridView.count(
-          crossAxisCount: MediaQuery.of(context).size.width > 700 ? 4 : 2,
-          shrinkWrap: true,
+          crossAxisCount: 2, shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          childAspectRatio: 1.55,
+          crossAxisSpacing: 10, mainAxisSpacing: 10, childAspectRatio: 1.6,
           children: [
-            _MetricCard(
-              label: 'Dues Generated',
-              value: data.groups.length.toString(),
-              icon: Icons.request_quote_rounded,
-              color: AppColors.primary,
-            ),
-            _MetricCard(
-              label: 'Total Billed',
-              value: fmt(data.totalBilled),
-              icon: Icons.receipt_long_rounded,
-              color: AppColors.textPrimary,
-            ),
-            _MetricCard(
-              label: 'Collected',
-              value: fmt(data.totalCollected),
-              icon: Icons.payments_rounded,
-              color: AppColors.success,
-            ),
-            _MetricCard(
-              label: 'Balance',
-              value: fmt(data.totalBalance),
-              icon: Icons.pending_actions_rounded,
-              color: AppColors.error,
-            ),
+            _StatCard('Total Billed',    _fmt(data.totalBilled),    Icons.receipt_long_rounded,   AppColors.primary),
+            _StatCard('Collected',       _fmt(data.totalCollected), Icons.check_circle_rounded,   AppColors.success),
+            _StatCard('Outstanding',     _fmt(data.totalBalance),   Icons.pending_actions_rounded, AppColors.error),
+            _StatCard('Collection Rate', '${(rate * 100).toStringAsFixed(1)}%', Icons.trending_up_rounded, AppColors.warning),
           ],
         ),
-        const SizedBox(height: 18),
-        _SectionTitle(
-          title: 'Combined Collection',
-          action: '${data.paidCount}/${data.invoiceCount} paid',
-        ),
+        const SizedBox(height: 16),
+        _SectionLabel('Member Status'),
         const SizedBox(height: 10),
-        _ProgressCard(
-          paid: data.totalCollected,
-          billed: data.totalBilled,
-          paidCount: data.paidCount,
-          partialCount: data.partialCount,
-          unpaidCount: data.unpaidCount,
-          fmt: fmt,
+        Container(
+          decoration: AppTheme.cardDecoration,
+          padding: const EdgeInsets.all(16),
+          child: Column(children: [
+            Row(children: [
+              _MemberStat('Total',     data.members.length,   AppColors.primary,  Icons.people_alt_rounded),
+              _MemberStat('Clear',     data.clearCount,       AppColors.success,  Icons.check_circle_rounded),
+              _MemberStat('Partial',   data.partialCount,     AppColors.warning,  Icons.pending_rounded),
+              _MemberStat('Defaulters',data.defaulterCount,   AppColors.error,    Icons.person_off_rounded),
+            ]),
+            const SizedBox(height: 14),
+            ClipRRect(borderRadius: BorderRadius.circular(8),
+              child: LinearProgressIndicator(value: rate, minHeight: 10,
+                backgroundColor: AppColors.error.withOpacity(0.15),
+                valueColor: const AlwaysStoppedAnimation(AppColors.success))),
+            const SizedBox(height: 6),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Text('${(rate * 100).toStringAsFixed(1)}% collected',
+                  style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.w600, fontSize: 12)),
+              Text('${data.defaulterCount} defaulter${data.defaulterCount != 1 ? 's' : ''}',
+                  style: const TextStyle(color: AppColors.error, fontSize: 12)),
+            ]),
+          ]),
         ),
-        const SizedBox(height: 18),
-        _SectionTitle(
-          title: 'Residents With Balance',
-          action: '${data.unpaidRows.length} entries',
-        ),
+        const SizedBox(height: 16),
+        _SectionLabel('All Dues — Summary'),
         const SizedBox(height: 10),
-        if (topUnpaid.isEmpty)
-          const _CleanState()
-        else ...[
-          _PdfActionBar(
-            selectedMonth: selectedMonth,
-            monthKeys: monthKeys,
-            onMonthChanged: onMonthChanged,
-            onPrintOverall: onPrintOverall,
-            onShareOverall: onShareOverall,
-            onPrintMonth: onPrintMonth,
-            onShareMonth: onShareMonth,
-          ),
-          const SizedBox(height: 10),
-          ...topUnpaid.map((row) => _UnpaidRowTile(row: row, fmt: fmt)),
-        ],
+        ...data.groups.map((g) => _DueSummaryCard(group: g)),
       ],
     );
   }
 }
 
-class _DuesTab extends StatelessWidget {
-  final _DuesSheetData data;
-  final String Function(num value) fmt;
+// ════════════════════════════════════════════════════════════════════════════
+// TAB 2 — MEMBER LEDGER
+// ════════════════════════════════════════════════════════════════════════════
 
-  const _DuesTab({required this.data, required this.fmt});
+class _LedgerTab extends StatefulWidget {
+  final _SheetData data;
+  final Future<void> Function() onExport;
+  const _LedgerTab({required this.data, required this.onExport});
+
+  @override
+  State<_LedgerTab> createState() => _LedgerTabState();
+}
+
+class _LedgerTabState extends State<_LedgerTab> {
+  final _searchCtrl = TextEditingController();
+  String _search = '';
+  String _type   = 'all';
+  String _status = 'all';
+
+  @override
+  void dispose() { _searchCtrl.dispose(); super.dispose(); }
+
+  List<_MemberRow> get _filtered => widget.data.members.where((m) {
+    if (_type   != 'all' && m.propertyType  != _type)   return false;
+    if (_status != 'all' && m.overallStatus != _status)  return false;
+    if (_search.isNotEmpty) {
+      final q = _search.toLowerCase();
+      if (!m.houseNo.toLowerCase().contains(q) && !m.name.toLowerCase().contains(q)) return false;
+    }
+    return true;
+  }).toList();
 
   @override
   Widget build(BuildContext context) {
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: data.groups.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final group = data.groups[index];
-        return _DueGroupCard(group: group, fmt: fmt);
-      },
-    );
+    final list = _filtered;
+    final outstanding = list.fold<int>(0, (s, m) => s + m.totalBalance);
+    return Column(children: [
+      Container(
+        color: Colors.white,
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: Column(children: [
+          Row(children: [
+            Expanded(child: _SearchField(ctrl: _searchCtrl, hint: 'Search flat or name…',
+                onChanged: (v) => setState(() => _search = v))),
+            const SizedBox(width: 8),
+            _ExportBtn(onTap: widget.onExport),
+          ]),
+          const SizedBox(height: 8),
+          SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [
+            _Chip('All',      _type == 'all',  () => setState(() => _type = 'all')),
+            const SizedBox(width: 6),
+            _Chip('Flats',    _type == 'flat', () => setState(() => _type = 'flat'),  color: AppColors.primary),
+            const SizedBox(width: 6),
+            _Chip('Houses',   _type == 'house',() => setState(() => _type = 'house'), color: AppColors.success),
+            const SizedBox(width: 12),
+            Container(width: 1, height: 20, color: AppColors.border),
+            const SizedBox(width: 12),
+            _Chip('Clear',    _status == 'CLEAR',    () => setState(() => _status = _status == 'CLEAR'    ? 'all' : 'CLEAR'),    color: AppColors.success),
+            const SizedBox(width: 6),
+            _Chip('Partial',  _status == 'PARTIAL',  () => setState(() => _status = _status == 'PARTIAL'  ? 'all' : 'PARTIAL'),  color: AppColors.warning),
+            const SizedBox(width: 6),
+            _Chip('Defaulter',_status == 'DEFAULTER',() => setState(() => _status = _status == 'DEFAULTER'? 'all' : 'DEFAULTER'), color: AppColors.error),
+          ])),
+        ]),
+      ),
+      Container(height: 1, color: AppColors.border),
+      _SummaryStrip(
+        icon: Icons.people_alt_rounded,
+        left: '${list.length} members',
+        right: 'Outstanding: ₹${NumberFormat('#,##0').format(outstanding)}',
+        color: AppColors.primaryDark,
+      ),
+      Expanded(
+        child: list.isEmpty
+            ? const Center(child: Text('No members match the filter.',
+                style: TextStyle(color: AppColors.textSecondary)))
+            : ListView.builder(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 24),
+                itemCount: list.length,
+                itemBuilder: (_, i) => _LedgerCard(member: list[i])),
+      ),
+    ]);
   }
 }
 
-class _UnpaidTab extends StatelessWidget {
-  final _DuesSheetData data;
-  final String Function(num value) fmt;
-  final String? selectedMonth;
-  final List<String> monthKeys;
-  final ValueChanged<String?> onMonthChanged;
-  final VoidCallback onPrintOverall;
-  final VoidCallback onShareOverall;
-  final VoidCallback? onPrintMonth;
-  final VoidCallback? onShareMonth;
+// ════════════════════════════════════════════════════════════════════════════
+// TAB 3 — PER DUE SHEET
+// ════════════════════════════════════════════════════════════════════════════
 
-  const _UnpaidTab({
-    required this.data,
-    required this.fmt,
-    required this.selectedMonth,
-    required this.monthKeys,
-    required this.onMonthChanged,
-    required this.onPrintOverall,
-    required this.onShareOverall,
-    required this.onPrintMonth,
-    required this.onShareMonth,
-  });
+class _PerDueTab extends StatefulWidget {
+  final _SheetData data;
+  final Future<void> Function(_DueGroup) onExport;
+  const _PerDueTab({required this.data, required this.onExport});
 
   @override
-  Widget build(BuildContext context) {
-    final rows = data.unpaidRows;
-    if (rows.isEmpty) return const _CleanState();
-
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: rows.length + 1,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (context, index) {
-        if (index == 0) {
-          return _PdfActionBar(
-            selectedMonth: selectedMonth,
-            monthKeys: monthKeys,
-            onMonthChanged: onMonthChanged,
-            onPrintOverall: onPrintOverall,
-            onShareOverall: onShareOverall,
-            onPrintMonth: onPrintMonth,
-            onShareMonth: onShareMonth,
-          );
-        }
-        return _UnpaidRowTile(row: rows[index - 1], fmt: fmt);
-      },
-    );
-  }
+  State<_PerDueTab> createState() => _PerDueTabState();
 }
 
-class _PdfActionBar extends StatelessWidget {
-  final String? selectedMonth;
-  final List<String> monthKeys;
-  final ValueChanged<String?> onMonthChanged;
-  final VoidCallback onPrintOverall;
-  final VoidCallback onShareOverall;
-  final VoidCallback? onPrintMonth;
-  final VoidCallback? onShareMonth;
+class _PerDueTabState extends State<_PerDueTab> {
+  late _DueGroup _sel;
+  String _status = 'all';
 
-  const _PdfActionBar({
-    required this.selectedMonth,
-    required this.monthKeys,
-    required this.onMonthChanged,
-    required this.onPrintOverall,
-    required this.onShareOverall,
-    required this.onPrintMonth,
-    required this.onShareMonth,
-  });
+  @override
+  void initState() { super.initState(); _sel = widget.data.groups.first; }
+
+  List<_MemberRow> get _members => widget.data.members
+      .where((m) => m.byGroup.containsKey(_sel.id))
+      .where((m) {
+        if (_status == 'all')     return true;
+        final inv = m.byGroup[_sel.id]!;
+        if (_status == 'PAID')    return inv.isPaid;
+        if (_status == 'PARTIAL') return inv.isPartial;
+        if (_status == 'UNPAID')  return inv.isUnpaid;
+        return true;
+      }).toList();
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: AppTheme.cardDecoration,
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.errorLight,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.picture_as_pdf_rounded,
-                  color: AppColors.error,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Defaulters PDF',
-                      style: TextStyle(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      'Print/share overall or month-wise pending dues',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceLight,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.border),
+    final list    = _members;
+    final coll    = list.fold<int>(0, (s, m) => s + (m.byGroup[_sel.id]?.paidAmount ?? 0));
+    final balance = list.fold<int>(0, (s, m) => s + (m.byGroup[_sel.id]?.balance ?? 0));
+
+    return Column(children: [
+      Container(
+        color: Colors.white,
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: Column(children: [
+          DropdownButtonFormField<_DueGroup>(
+            value: _sel,
+            decoration: InputDecoration(
+              labelText: 'Select Due',
+              labelStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              filled: true, fillColor: AppColors.gray50,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.border)),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.border)),
             ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                isExpanded: true,
-                value: selectedMonth,
-                hint: const Text('No month available'),
-                icon: const Icon(Icons.keyboard_arrow_down_rounded),
-                items: monthKeys
-                    .map(
-                      (month) => DropdownMenuItem(
-                        value: month,
-                        child: Text(_InvoiceRow.monthKeyLabel(month)),
-                      ),
-                    )
-                    .toList(),
-                onChanged: monthKeys.isEmpty ? null : onMonthChanged,
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onPrintMonth,
-                  icon: const Icon(Icons.print_rounded, size: 18),
-                  label: const Text('Print Month'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onShareMonth,
-                  icon: const Icon(Icons.ios_share_rounded, size: 18),
-                  label: const Text('Share Month'),
-                ),
-              ),
-            ],
+            items: widget.data.groups.map((g) => DropdownMenuItem(
+              value: g,
+              child: Text('${g.type == 'DEMAND' ? '⚡ ' : '🏠 '}${g.title}',
+                  overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+            )).toList(),
+            onChanged: (g) { if (g != null) setState(() => _sel = g); },
           ),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: onPrintOverall,
-                  icon: const Icon(Icons.print_rounded, size: 18),
-                  label: const Text('Print Overall'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: onShareOverall,
-                  icon: const Icon(Icons.ios_share_rounded, size: 18),
-                  label: const Text('Share Overall'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
+          Row(children: [
+            _Chip('All',     _status == 'all',     () => setState(() => _status = 'all')),
+            const SizedBox(width: 6),
+            _Chip('Paid',    _status == 'PAID',    () => setState(() => _status = 'PAID'),    color: AppColors.success),
+            const SizedBox(width: 6),
+            _Chip('Partial', _status == 'PARTIAL', () => setState(() => _status = 'PARTIAL'), color: AppColors.warning),
+            const SizedBox(width: 6),
+            _Chip('Unpaid',  _status == 'UNPAID',  () => setState(() => _status = 'UNPAID'),  color: AppColors.error),
+            const Spacer(),
+            _ExportBtn(onTap: () => widget.onExport(_sel)),
+          ]),
+        ]),
       ),
-    );
+      Container(height: 1, color: AppColors.border),
+      Container(
+        color: AppColors.primaryDark,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(children: [
+          _StripStat('Total',   '${_sel.invoiceCount}', Colors.white),
+          _StripStat('Paid',    '${_sel.paidCount}',    const Color(0xFF6EE7B7)),
+          _StripStat('Partial', '${_sel.partialCount}', const Color(0xFFFCD34D)),
+          _StripStat('Unpaid',  '${_sel.unpaidCount}',  const Color(0xFFFCA5A5)),
+          const Spacer(),
+          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text('Collected: ₹${NumberFormat('#,##0').format(coll)}',
+                style: const TextStyle(color: Colors.white70, fontSize: 11)),
+            Text('Pending: ₹${NumberFormat('#,##0').format(balance)}',
+                style: const TextStyle(color: Colors.white70, fontSize: 11)),
+          ]),
+        ]),
+      ),
+      Expanded(
+        child: list.isEmpty
+            ? const Center(child: Text('No members for this filter.',
+                style: TextStyle(color: AppColors.textSecondary)))
+            : ListView.builder(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 24),
+                itemCount: list.length,
+                itemBuilder: (_, i) => _DueInvoiceCard(member: list[i], invoice: list[i].byGroup[_sel.id]!)),
+      ),
+    ]);
   }
 }
 
-class _DueGroupCard extends StatelessWidget {
+// ════════════════════════════════════════════════════════════════════════════
+// TAB 4 — DEFAULTERS
+// ════════════════════════════════════════════════════════════════════════════
+
+class _DefaultersTab extends StatefulWidget {
+  final _SheetData data;
+  final Future<void> Function(String?) onExport;
+  const _DefaultersTab({required this.data, required this.onExport});
+
+  @override
+  State<_DefaultersTab> createState() => _DefaultersTabState();
+}
+
+class _DefaultersTabState extends State<_DefaultersTab> {
+  _DueGroup? _filter;
+  final _searchCtrl = TextEditingController();
+  String _search = '';
+
+  @override
+  void dispose() { _searchCtrl.dispose(); super.dispose(); }
+
+  List<_MemberRow> get _defaulters {
+    var list = _filter == null
+        ? widget.data.defaulters
+        : widget.data.members.where((m) { final i = m.byGroup[_filter!.id]; return i != null && i.isUnpaid; }).toList();
+    if (_search.isNotEmpty) {
+      final q = _search.toLowerCase();
+      list = list.where((m) => m.houseNo.toLowerCase().contains(q) || m.name.toLowerCase().contains(q)).toList();
+    }
+    return list;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final list = _defaulters;
+    final outstanding = list.fold<int>(0, (s, m) => s + m.totalBalance);
+
+    return Column(children: [
+      Container(
+        color: Colors.white,
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: Column(children: [
+          Row(children: [
+            Expanded(child: _SearchField(ctrl: _searchCtrl, hint: 'Search flat or name…',
+                onChanged: (v) => setState(() => _search = v))),
+            const SizedBox(width: 8),
+            _ExportBtn(onTap: () => widget.onExport(_filter?.id)),
+          ]),
+          const SizedBox(height: 8),
+          SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [
+            _Chip('All Dues', _filter == null, () => setState(() => _filter = null)),
+            ...widget.data.groups.map((g) => Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: _Chip(g.title, _filter == g, () => setState(() => _filter = _filter == g ? null : g),
+                  color: g.type == 'DEMAND' ? const Color(0xFF7C3AED) : AppColors.primary),
+            )),
+          ])),
+        ]),
+      ),
+      Container(height: 1, color: AppColors.border),
+      _SummaryStrip(
+        icon: Icons.person_off_rounded,
+        left: '${list.length} defaulter${list.length != 1 ? 's' : ''}',
+        right: 'Outstanding: ₹${NumberFormat('#,##0').format(outstanding)}',
+        color: AppColors.error,
+      ),
+      Expanded(
+        child: list.isEmpty
+            ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.check_circle_rounded, size: 52, color: AppColors.success),
+                const SizedBox(height: 12),
+                Text(_filter == null ? 'No defaulters! Everyone is paid up. 🎉' : 'No defaulters for this due.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 14)),
+              ]))
+            : ListView.builder(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 24),
+                itemCount: list.length,
+                itemBuilder: (_, i) => _DefaulterCard(
+                    member: list[i], groups: widget.data.groups, groupFilter: _filter)),
+      ),
+    ]);
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// SHARED CARD WIDGETS
+// ════════════════════════════════════════════════════════════════════════════
+
+class _DueSummaryCard extends StatelessWidget {
   final _DueGroup group;
-  final String Function(num value) fmt;
+  const _DueSummaryCard({required this.group});
 
-  const _DueGroupCard({required this.group, required this.fmt});
-
-  @override
-  Widget build(BuildContext context) {
-    final progress = group.totalBilled == 0
-        ? 0.0
-        : (group.totalCollected / group.totalBilled).clamp(0.0, 1.0);
-    final statusColor =
-        group.isClosed ? AppColors.textSecondary : AppColors.success;
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: () => showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (_) => _DueDetailSheet(group: group, fmt: fmt),
-      ),
-      child: Container(
-        decoration: AppTheme.cardDecoration,
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: group.isDemand
-                        ? AppColors.warningLight
-                        : AppColors.primaryLight,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    group.isDemand
-                        ? Icons.request_quote_rounded
-                        : Icons.calendar_month_rounded,
-                    color:
-                        group.isDemand ? AppColors.warning : AppColors.primary,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        group.title,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 15,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        group.subtitle.ifBlank(group.type),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                AppTheme.statusChip(group.status, statusColor),
-              ],
-            ),
-            const SizedBox(height: 14),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(999),
-              child: LinearProgressIndicator(
-                value: progress,
-                minHeight: 8,
-                backgroundColor: AppColors.errorLight,
-                valueColor:
-                    const AlwaysStoppedAnimation<Color>(AppColors.success),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                _MiniStat(label: 'Billed', value: fmt(group.totalBilled)),
-                _MiniStat(label: 'Collected', value: fmt(group.totalCollected)),
-                _MiniStat(label: 'Balance', value: fmt(group.totalBalance)),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Text(
-                  '${group.paidCount} paid',
-                  style: const TextStyle(
-                    color: AppColors.success,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  '${group.partialCount} partial',
-                  style: const TextStyle(
-                    color: AppColors.warning,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  '${group.unpaidCount} unpaid',
-                  style: const TextStyle(
-                    color: AppColors.error,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                  ),
-                ),
-                const Spacer(),
-                const Icon(Icons.chevron_right_rounded,
-                    color: AppColors.textHint),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DueDetailSheet extends StatelessWidget {
-  final _DueGroup group;
-  final String Function(num value) fmt;
-
-  const _DueDetailSheet({required this.group, required this.fmt});
+  String _fmt(int v) => '₹${NumberFormat('#,##0').format(v)}';
 
   @override
   Widget build(BuildContext context) {
-    final rows = [...group.rows]..sort((a, b) {
-        final houseCompare = a.houseNo.compareTo(b.houseNo);
-        if (houseCompare != 0) return houseCompare;
-        return a.name.compareTo(b.name);
-      });
-
-    return DraggableScrollableSheet(
-      initialChildSize: 0.82,
-      minChildSize: 0.45,
-      maxChildSize: 0.96,
-      builder: (_, controller) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          children: [
-            const SizedBox(height: 12),
-            Container(
-              width: 42,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.border,
-                borderRadius: BorderRadius.circular(999),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 12, 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          group.title,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 17,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${fmt(group.totalCollected)} collected of ${fmt(group.totalBilled)}',
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1, color: AppColors.divider),
-            Expanded(
-              child: ListView.separated(
-                controller: controller,
-                padding: const EdgeInsets.all(16),
-                itemCount: rows.length,
-                separatorBuilder: (_, __) =>
-                    const Divider(height: 1, color: AppColors.divider),
-                itemBuilder: (context, index) =>
-                    _InvoiceRowTile(row: rows[index], fmt: fmt),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _InvoiceRowTile extends StatelessWidget {
-  final _InvoiceRow row;
-  final String Function(num value) fmt;
-
-  const _InvoiceRowTile({required this.row, required this.fmt});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = row.statusColor;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Center(
-              child: Text(
-                row.houseNo.ifBlank('-'),
-                style: TextStyle(
-                  color: color,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  row.name.ifBlank('Unknown resident'),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Paid ${fmt(row.paidAmount)} • Balance ${fmt(row.balance)}',
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          AppTheme.statusChip(row.sheetStatus, color),
-        ],
-      ),
-    );
-  }
-}
-
-class _UnpaidRowTile extends StatelessWidget {
-  final _InvoiceRow row;
-  final String Function(num value) fmt;
-
-  const _UnpaidRowTile({required this.row, required this.fmt});
-
-  @override
-  Widget build(BuildContext context) {
+    final isDemand = group.type == 'DEMAND';
+    final color    = isDemand ? const Color(0xFF7C3AED) : AppColors.primary;
     return Container(
-      decoration: AppTheme.subtleCardDecoration,
-      padding: const EdgeInsets.all(12),
-      child: Row(
-        children: [
-          const Icon(Icons.person_off_outlined, color: AppColors.error),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${row.name.ifBlank('Unknown')} • ${row.houseNo.ifBlank('-')}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  row.groupTitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          Text(
-            fmt(row.balance),
-            style: const TextStyle(
-              color: AppColors.error,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MetricCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color color;
-
-  const _MetricCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
       decoration: AppTheme.cardDecoration,
       padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Icon(icon, color: color, size: 22),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  value,
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 12,
-                ),
-              ),
-            ],
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(isDemand ? Icons.request_quote_rounded : Icons.home_outlined, size: 11, color: color),
+              const SizedBox(width: 4),
+              Text(isDemand ? 'DEMAND' : 'MAINTENANCE',
+                  style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w700)),
+            ]),
           ),
-        ],
-      ),
+          const Spacer(),
+          Text('${group.invoiceCount} members', style: const TextStyle(color: AppColors.textHint, fontSize: 11)),
+        ]),
+        const SizedBox(height: 8),
+        Text(group.title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.textPrimary)),
+        const SizedBox(height: 8),
+        Row(children: [
+          _MiniStat('Billed',    _fmt(group.totalBilled),    AppColors.textSecondary),
+          _MiniStat('Collected', _fmt(group.totalCollected), AppColors.success),
+          _MiniStat('Pending',   _fmt(group.totalOutstanding), AppColors.error),
+        ]),
+        const SizedBox(height: 8),
+        ClipRRect(borderRadius: BorderRadius.circular(6),
+          child: LinearProgressIndicator(value: group.collectionRate, minHeight: 6,
+            backgroundColor: AppColors.error.withOpacity(0.12),
+            valueColor: AlwaysStoppedAnimation(color))),
+        const SizedBox(height: 4),
+        Row(children: [
+          Text('${group.paidCount} paid', style: const TextStyle(color: AppColors.success, fontSize: 11, fontWeight: FontWeight.w600)),
+          if (group.partialCount > 0)
+            Text('  ·  ${group.partialCount} partial', style: const TextStyle(color: AppColors.warning, fontSize: 11, fontWeight: FontWeight.w600)),
+          Text('  ·  ${group.unpaidCount} unpaid', style: const TextStyle(color: AppColors.error, fontSize: 11, fontWeight: FontWeight.w600)),
+        ]),
+      ]),
     );
   }
 }
 
-class _ProgressCard extends StatelessWidget {
-  final num paid;
-  final num billed;
-  final int paidCount;
-  final int partialCount;
-  final int unpaidCount;
-  final String Function(num value) fmt;
-
-  const _ProgressCard({
-    required this.paid,
-    required this.billed,
-    required this.paidCount,
-    required this.partialCount,
-    required this.unpaidCount,
-    required this.fmt,
-  });
+class _LedgerCard extends StatelessWidget {
+  final _MemberRow member;
+  const _LedgerCard({required this.member});
 
   @override
   Widget build(BuildContext context) {
-    final progress = billed == 0 ? 0.0 : (paid / billed).clamp(0.0, 1.0);
+    final st = member.overallStatus;
+    final c  = st == 'CLEAR' ? AppColors.success : st == 'PARTIAL' ? AppColors.warning : AppColors.error;
+    final isHouse = member.propertyType == 'house';
     return Container(
+      margin: const EdgeInsets.only(bottom: 8),
       decoration: AppTheme.cardDecoration,
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                fmt(paid),
-                style: const TextStyle(
-                  color: AppColors.success,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 20,
-                ),
-              ),
-              const Text(
-                ' collected',
-                style: TextStyle(color: AppColors.textSecondary),
-              ),
-              const Spacer(),
-              Text(
-                '${(progress * 100).round()}%',
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
+      padding: const EdgeInsets.all(12),
+      child: Row(children: [
+        Container(width: 42, height: 42,
+          decoration: BoxDecoration(
+            color: (isHouse ? const Color(0xFF059669) : AppColors.primary).withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12)),
+          child: Icon(isHouse ? Icons.house_rounded : Icons.apartment_rounded,
+              color: isHouse ? const Color(0xFF059669) : AppColors.primary, size: 22)),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Text(member.houseNo, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: AppColors.textPrimary)),
+            const SizedBox(width: 8),
+            Expanded(child: Text(member.name, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 12))),
+          ]),
+          const SizedBox(height: 3),
+          Row(children: [
+            Text('Billed: ₹${NumberFormat('#,##0').format(member.totalBilled)}',
+                style: const TextStyle(color: AppColors.textHint, fontSize: 11)),
+            const Text('  ·  ', style: TextStyle(color: AppColors.textHint, fontSize: 11)),
+            Text('Paid: ₹${NumberFormat('#,##0').format(member.totalPaid)}',
+                style: const TextStyle(color: AppColors.success, fontSize: 11, fontWeight: FontWeight.w600)),
+            if (member.totalBalance > 0) ...[
+              const Text('  ·  ', style: TextStyle(color: AppColors.textHint, fontSize: 11)),
+              Text('Due: ₹${NumberFormat('#,##0').format(member.totalBalance)}',
+                  style: const TextStyle(color: AppColors.error, fontSize: 11, fontWeight: FontWeight.w600)),
             ],
-          ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 10,
-              backgroundColor: AppColors.errorLight,
-              valueColor:
-                  const AlwaysStoppedAnimation<Color>(AppColors.success),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _LegendDot(color: AppColors.success, label: '$paidCount paid'),
-              const SizedBox(width: 12),
-              _LegendDot(
-                  color: AppColors.warning, label: '$partialCount partial'),
-              const SizedBox(width: 12),
-              _LegendDot(color: AppColors.error, label: '$unpaidCount unpaid'),
-            ],
-          ),
-        ],
-      ),
+          ]),
+        ])),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(color: c.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+          child: Text(st, style: TextStyle(color: c, fontSize: 10, fontWeight: FontWeight.w800)),
+        ),
+      ]),
     );
   }
+}
+
+class _DueInvoiceCard extends StatelessWidget {
+  final _MemberRow       member;
+  final _InvoiceSummary invoice;
+  const _DueInvoiceCard({required this.member, required this.invoice});
+
+  @override
+  Widget build(BuildContext context) {
+    final Color c;
+    final String label;
+    if (invoice.isPaid)         { c = AppColors.success; label = 'PAID'; }
+    else if (invoice.isPartial) { c = AppColors.warning; label = 'PARTIAL'; }
+    else                        { c = AppColors.error;   label = 'UNPAID'; }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: AppTheme.cardDecoration,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(children: [
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Text(member.houseNo, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: AppColors.textPrimary)),
+            const SizedBox(width: 8),
+            Expanded(child: Text(member.name, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 12))),
+          ]),
+          const SizedBox(height: 3),
+          Row(children: [
+            Text('₹${NumberFormat('#,##0').format(invoice.amount)}', style: const TextStyle(color: AppColors.textHint, fontSize: 11)),
+            if (invoice.paidAmount > 0) ...[
+              const Text('  ·  ', style: TextStyle(color: AppColors.textHint, fontSize: 11)),
+              Text('Paid ₹${NumberFormat('#,##0').format(invoice.paidAmount)}',
+                  style: const TextStyle(color: AppColors.success, fontSize: 11, fontWeight: FontWeight.w600)),
+            ],
+            if (invoice.balance > 0) ...[
+              const Text('  ·  ', style: TextStyle(color: AppColors.textHint, fontSize: 11)),
+              Text('Due ₹${NumberFormat('#,##0').format(invoice.balance)}',
+                  style: const TextStyle(color: AppColors.error, fontSize: 11, fontWeight: FontWeight.w600)),
+            ],
+          ]),
+        ])),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(color: c.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+          child: Text(label, style: TextStyle(color: c, fontSize: 10, fontWeight: FontWeight.w800)),
+        ),
+      ]),
+    );
+  }
+}
+
+class _DefaulterCard extends StatelessWidget {
+  final _MemberRow       member;
+  final List<_DueGroup>  groups;
+  final _DueGroup?       groupFilter;
+  const _DefaulterCard({required this.member, required this.groups, required this.groupFilter});
+
+  @override
+  Widget build(BuildContext context) {
+    final isHouse = member.propertyType == 'house';
+    final unpaid  = groupFilter != null
+        ? groups.where((g) { final i = member.byGroup[g.id]; return g == groupFilter && i != null && i.isUnpaid; }).toList()
+        : groups.where((g) { final i = member.byGroup[g.id]; return i != null && i.isUnpaid; }).toList();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: AppTheme.cardDecoration,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+          child: Row(children: [
+            Container(width: 42, height: 42,
+              decoration: BoxDecoration(color: AppColors.error.withOpacity(0.08), borderRadius: BorderRadius.circular(12)),
+              child: Icon(isHouse ? Icons.house_rounded : Icons.apartment_rounded, color: AppColors.error, size: 20)),
+            const SizedBox(width: 12),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Text(member.houseNo, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppColors.textPrimary)),
+                const SizedBox(width: 8),
+                Expanded(child: Text(member.name, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 12))),
+              ]),
+              Text(isHouse ? 'Indep. House' : 'Flat',
+                  style: TextStyle(color: isHouse ? AppColors.success : AppColors.primary,
+                      fontSize: 11, fontWeight: FontWeight.w600)),
+            ])),
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text('₹${NumberFormat('#,##0').format(member.totalBalance)}',
+                  style: const TextStyle(color: AppColors.error, fontWeight: FontWeight.w800, fontSize: 16)),
+              const Text('outstanding', style: TextStyle(color: AppColors.textHint, fontSize: 10)),
+            ]),
+          ]),
+        ),
+        if (unpaid.isNotEmpty) ...[
+          const Divider(height: 1, color: AppColors.divider),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('UNPAID DUES', style: TextStyle(color: AppColors.textHint, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+              const SizedBox(height: 6),
+              Wrap(spacing: 6, runSpacing: 6, children: unpaid.map((g) {
+                final inv = member.byGroup[g.id];
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withOpacity(0.07),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.error.withOpacity(0.2))),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(g.type == 'DEMAND' ? Icons.request_quote_rounded : Icons.home_outlined,
+                        size: 12, color: AppColors.error),
+                    const SizedBox(width: 5),
+                    Text(g.title, style: const TextStyle(color: AppColors.error, fontSize: 11, fontWeight: FontWeight.w600)),
+                    if (inv != null && inv.balance > 0)
+                      Text('  ₹${NumberFormat('#,##0').format(inv.balance)}',
+                          style: const TextStyle(color: AppColors.error, fontSize: 11, fontWeight: FontWeight.w700)),
+                  ]),
+                );
+              }).toList()),
+            ]),
+          ),
+        ],
+      ]),
+    );
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MICRO WIDGETS
+// ════════════════════════════════════════════════════════════════════════════
+
+class _StatCard extends StatelessWidget {
+  final String label, value;
+  final IconData icon;
+  final Color  color;
+  const _StatCard(this.label, this.value, this.icon, this.color);
+
+  @override
+  Widget build(BuildContext context) => Container(
+    decoration: AppTheme.cardDecoration,
+    padding: const EdgeInsets.all(14),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+      Container(width: 32, height: 32,
+        decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+        child: Icon(icon, color: color, size: 18)),
+      const SizedBox(height: 8),
+      Text(value, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: color)),
+      Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+    ]),
+  );
+}
+
+class _MemberStat extends StatelessWidget {
+  final String label;
+  final int    count;
+  final Color  color;
+  final IconData icon;
+  const _MemberStat(this.label, this.count, this.color, this.icon);
+
+  @override
+  Widget build(BuildContext context) => Expanded(child: Column(children: [
+    Container(width: 38, height: 38,
+      decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+      child: Icon(icon, color: color, size: 18)),
+    const SizedBox(height: 5),
+    Text('$count', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: color)),
+    Text(label,    style: const TextStyle(color: AppColors.textSecondary, fontSize: 10)),
+  ]));
 }
 
 class _MiniStat extends StatelessWidget {
-  final String label;
-  final String value;
+  final String label, value;
+  final Color  color;
+  const _MiniStat(this.label, this.value, this.color);
 
-  const _MiniStat({required this.label, required this.value});
+  @override
+  Widget build(BuildContext context) => Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    Text(label, style: const TextStyle(color: AppColors.textHint,   fontSize: 10)),
+    Text(value, style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 13)),
+  ]));
+}
+
+class _StripStat extends StatelessWidget {
+  final String label, value;
+  final Color  color;
+  const _StripStat(this.label, this.value, this.color);
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(right: 14),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: const TextStyle(color: Colors.white54, fontSize: 10)),
+      Text(value, style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 16)),
+    ]),
+  );
+}
+
+class _SummaryStrip extends StatelessWidget {
+  final IconData icon;
+  final String   left, right;
+  final Color    color;
+  const _SummaryStrip({required this.icon, required this.left, required this.right, required this.color});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    color: color,
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    child: Row(children: [
+      Icon(icon, color: Colors.white70, size: 16),
+      const SizedBox(width: 6),
+      Text(left,  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
+      const Spacer(),
+      Text(right, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+    ]),
+  );
+}
+
+class _Chip extends StatelessWidget {
+  final String   label;
+  final bool     selected;
+  final VoidCallback onTap;
+  final Color?   color;
+  const _Chip(this.label, this.selected, this.onTap, {this.color});
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
-              fontSize: 13,
-            ),
-          ),
-          Text(
-            label,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 11,
-            ),
-          ),
-        ],
+    final c = color ?? AppColors.primary;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? c : AppColors.gray50,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: selected ? c : AppColors.border, width: 1.5)),
+        child: Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+            color: selected ? Colors.white : AppColors.textSecondary)),
       ),
     );
   }
 }
 
-class _LegendDot extends StatelessWidget {
-  final Color color;
-  final String label;
-
-  const _LegendDot({required this.color, required this.label});
+class _SearchField extends StatelessWidget {
+  final TextEditingController ctrl;
+  final String hint;
+  final ValueChanged<String> onChanged;
+  const _SearchField({required this.ctrl, required this.hint, required this.onChanged});
 
   @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
+  Widget build(BuildContext context) => TextField(
+    controller: ctrl,
+    onChanged: onChanged,
+    decoration: InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 13),
+      prefixIcon: const Icon(Icons.search_rounded, color: AppColors.textSecondary, size: 18),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      filled: true, fillColor: AppColors.gray50,
+      border:        OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.border)),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.border)),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
+    ),
+  );
+}
+
+class _ExportBtn extends StatefulWidget {
+  final Future<void> Function() onTap;
+  const _ExportBtn({required this.onTap});
+  @override State<_ExportBtn> createState() => _ExportBtnState();
+}
+
+class _ExportBtnState extends State<_ExportBtn> {
+  bool _busy = false;
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: _busy ? null : () async {
+      setState(() => _busy = true);
+      try { await widget.onTap(); } finally { if (mounted) setState(() => _busy = false); }
+    },
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(color: AppColors.success, borderRadius: BorderRadius.circular(10)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        _busy
+            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+            : const Icon(Icons.download_rounded, color: Colors.white, size: 16),
         const SizedBox(width: 5),
-        Text(
-          label,
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-        ),
-      ],
-    );
-  }
+        const Text('CSV', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+      ]),
+    ),
+  );
 }
 
-class _SectionTitle extends StatelessWidget {
-  final String title;
-  final String action;
-
-  const _SectionTitle({required this.title, required this.action});
-
+class _SectionLabel extends StatelessWidget {
+  final String text;
+  const _SectionLabel(this.text);
   @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontWeight: FontWeight.w800,
-            color: AppColors.textPrimary,
-            fontSize: 15,
-          ),
-        ),
-        const Spacer(),
-        Text(
-          action,
-          style: const TextStyle(
-            color: AppColors.textSecondary,
-            fontWeight: FontWeight.w600,
-            fontSize: 12,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.all(32),
-        child: Text(
-          'No dues have been generated yet.',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: AppColors.textSecondary),
-        ),
-      ),
-    );
-  }
-}
-
-class _CleanState extends StatelessWidget {
-  const _CleanState();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Container(
-        margin: const EdgeInsets.all(16),
-        padding: const EdgeInsets.all(24),
-        decoration: AppTheme.cardDecoration,
-        child: const Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.verified_rounded, color: AppColors.success, size: 44),
-            SizedBox(height: 10),
-            Text(
-              'No unpaid dues',
-              style: TextStyle(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            SizedBox(height: 4),
-            Text(
-              'Every generated invoice is fully collected.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  final String message;
-
-  const _ErrorState({required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Text(
-          message,
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: AppColors.error),
-        ),
-      ),
-    );
-  }
-}
-
-class _DefaultersPdfBuilder {
-  static final _currency = NumberFormat('₹#,##0');
-  static const _headerColor = PdfColor.fromInt(0xFF1E40AF);
-  static const _errorColor = PdfColor.fromInt(0xFFDC2626);
-  static const _warningColor = PdfColor.fromInt(0xFFF59E0B);
-  static const _successColor = PdfColor.fromInt(0xFF059669);
-  static const _rowAlt = PdfColor.fromInt(0xFFF8FAFC);
-
-  static Future<Uint8List> build(_DuesSheetData data,
-      {String? monthKey}) async {
-    final regularFont = await PdfGoogleFonts.notoSansRegular();
-    final boldFont = await PdfGoogleFonts.notoSansBold();
-    final pdf = pw.Document(
-      theme: pw.ThemeData.withFont(base: regularFont, bold: boldFont),
-    );
-
-    final defaulters =
-        monthKey == null ? data.unpaidRows : data.unpaidRowsForMonth(monthKey);
-    final scopeLabel =
-        monthKey == null ? 'Overall' : _InvoiceRow.monthKeyLabel(monthKey);
-    final generatedOn =
-        DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.now());
-    final totalPending =
-        defaulters.fold<num>(0, (total, row) => total + row.balance);
-    final partialCount = defaulters.where((row) => row.isPartial).length;
-    final unpaidCount = defaulters.length - partialCount;
-
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(32),
-        footer: (context) => pw.Align(
-          alignment: pw.Alignment.centerRight,
-          child: pw.Text(
-            'Page ${context.pageNumber} of ${context.pagesCount}',
-            style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
-          ),
-        ),
-        build: (context) => [
-          pw.Container(
-            decoration: const pw.BoxDecoration(
-              color: _headerColor,
-              borderRadius: pw.BorderRadius.all(pw.Radius.circular(10)),
-            ),
-            padding:
-                const pw.EdgeInsets.symmetric(horizontal: 22, vertical: 18),
-            child: pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      'DEFAULTERS DUES SHEET',
-                      style: pw.TextStyle(
-                        color: PdfColors.white,
-                        fontSize: 18,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                    pw.SizedBox(height: 4),
-                    pw.Text(
-                      '$scopeLabel - residents with pending or partially paid dues',
-                      style: const pw.TextStyle(
-                        color: PdfColors.white,
-                        fontSize: 10,
-                      ),
-                    ),
-                  ],
-                ),
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.end,
-                  children: [
-                    pw.Text(
-                      'Generated',
-                      style: const pw.TextStyle(
-                        color: PdfColors.white,
-                        fontSize: 8,
-                      ),
-                    ),
-                    pw.Text(
-                      generatedOn,
-                      style: pw.TextStyle(
-                        color: PdfColors.white,
-                        fontSize: 10,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          pw.SizedBox(height: 14),
-          pw.Row(
-            children: [
-              _statBox('Pending Entries', '${defaulters.length}', _errorColor),
-              pw.SizedBox(width: 8),
-              _statBox(
-                  'Total Balance', _currency.format(totalPending), _errorColor),
-              pw.SizedBox(width: 8),
-              _statBox('Unpaid', '$unpaidCount', _errorColor),
-              pw.SizedBox(width: 8),
-              _statBox('Partial', '$partialCount', _warningColor),
-            ],
-          ),
-          pw.SizedBox(height: 16),
-          if (defaulters.isEmpty)
-            pw.Container(
-              padding: const pw.EdgeInsets.all(18),
-              decoration: pw.BoxDecoration(
-                border: pw.Border.all(color: PdfColors.grey300),
-                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
-              ),
-              child: pw.Text(
-                'No pending dues found.',
-                style: pw.TextStyle(
-                  color: _successColor,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-            )
-          else
-            pw.TableHelper.fromTextArray(
-              headers: [
-                'Flat',
-                'Resident',
-                'Due',
-                'Billed',
-                'Paid',
-                'Balance',
-                'Status',
-              ],
-              data: defaulters.map((row) {
-                return [
-                  row.houseNo.ifBlank('-'),
-                  row.name.ifBlank('Unknown'),
-                  row.groupTitle,
-                  _currency.format(row.amount),
-                  row.paidAmount > 0 ? _currency.format(row.paidAmount) : '-',
-                  _currency.format(row.balance),
-                  row.sheetStatus,
-                ];
-              }).toList(),
-              border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
-              headerDecoration: const pw.BoxDecoration(color: _headerColor),
-              headerStyle: pw.TextStyle(
-                color: PdfColors.white,
-                fontSize: 8,
-                fontWeight: pw.FontWeight.bold,
-              ),
-              cellStyle: const pw.TextStyle(
-                color: PdfColors.grey900,
-                fontSize: 8,
-              ),
-              cellAlignments: {
-                0: pw.Alignment.centerLeft,
-                1: pw.Alignment.centerLeft,
-                2: pw.Alignment.centerLeft,
-                3: pw.Alignment.centerRight,
-                4: pw.Alignment.centerRight,
-                5: pw.Alignment.centerRight,
-                6: pw.Alignment.center,
-              },
-              cellHeight: 22,
-              rowDecoration: const pw.BoxDecoration(color: PdfColors.white),
-              oddRowDecoration: const pw.BoxDecoration(color: _rowAlt),
-            ),
-          pw.SizedBox(height: 14),
-          pw.Divider(color: PdfColors.grey300),
-          pw.Text(
-            'Scope: $scopeLabel. This is a system-generated pending dues list from live invoice data. '
-            'Balances include all currently unpaid or partially paid generated dues.',
-            style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
-          ),
-        ],
-      ),
-    );
-
-    return pdf.save();
-  }
-
-  static pw.Widget _statBox(String label, String value, PdfColor color) {
-    return pw.Expanded(
-      child: pw.Container(
-        padding: const pw.EdgeInsets.all(10),
-        decoration: pw.BoxDecoration(
-          color: _tint(color, 0.9),
-          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
-          border: pw.Border.all(color: _tint(color, 0.72), width: 0.5),
-        ),
-        child: pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            pw.Text(
-              value,
-              style: pw.TextStyle(
-                color: color,
-                fontSize: 14,
-                fontWeight: pw.FontWeight.bold,
-              ),
-            ),
-            pw.SizedBox(height: 2),
-            pw.Text(
-              label,
-              style: const pw.TextStyle(
-                color: PdfColors.grey700,
-                fontSize: 8,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  static PdfColor _tint(PdfColor color, double factor) {
-    return PdfColor(
-      color.red + (1.0 - color.red) * factor,
-      color.green + (1.0 - color.green) * factor,
-      color.blue + (1.0 - color.blue) * factor,
-    );
-  }
-}
-
-class _DuesSheetData {
-  final List<_DueGroup> groups;
-
-  const _DuesSheetData({required this.groups});
-
-  Iterable<_InvoiceRow> get rows => groups.expand((group) => group.rows);
-
-  int get invoiceCount => rows.length;
-  num get totalBilled =>
-      groups.fold<num>(0, (total, group) => total + group.totalBilled);
-  num get totalCollected =>
-      groups.fold<num>(0, (total, group) => total + group.totalCollected);
-  num get totalBalance =>
-      groups.fold<num>(0, (total, group) => total + group.totalBalance);
-  int get paidCount => rows.where((row) => row.isPaid).length;
-  int get partialCount => rows.where((row) => row.isPartial).length;
-  int get unpaidCount => rows.where((row) => row.balance > 0).length;
-
-  List<String> get monthKeys {
-    final keys = rows
-        .map((row) => row.reportMonthKey)
-        .where((month) => month.isNotEmpty)
-        .toSet()
-        .toList();
-    keys.sort((a, b) => b.compareTo(a));
-    return keys;
-  }
-
-  List<_InvoiceRow> get unpaidRows {
-    final list = rows.where((row) => row.balance > 0).toList();
-    _sortDefaulters(list);
-    return list;
-  }
-
-  List<_InvoiceRow> unpaidRowsForMonth(String monthKey) {
-    final list = rows
-        .where((row) => row.balance > 0 && row.reportMonthKey == monthKey)
-        .toList();
-    _sortDefaulters(list);
-    return list;
-  }
-
-  void _sortDefaulters(List<_InvoiceRow> list) {
-    list.sort((a, b) {
-      final balanceCompare = b.balance.compareTo(a.balance);
-      if (balanceCompare != 0) return balanceCompare;
-      return a.houseNo.compareTo(b.houseNo);
-    });
-  }
-}
-
-class _DueGroup {
-  final String id;
-  final String title;
-  final String subtitle;
-  final String type;
-  final String status;
-  final DateTime sortDate;
-  final List<_InvoiceRow> rows = [];
-
-  _DueGroup({
-    required this.id,
-    required this.title,
-    required this.subtitle,
-    required this.type,
-    required this.status,
-    required this.sortDate,
-  });
-
-  bool get isDemand => type == 'DEMAND';
-  bool get isClosed => status == 'CLOSED';
-  num get totalBilled => rows.fold<num>(0, (total, row) => total + row.amount);
-  num get totalCollected =>
-      rows.fold<num>(0, (total, row) => total + row.paidAmount);
-  num get totalBalance =>
-      rows.fold<num>(0, (total, row) => total + row.balance);
-  int get paidCount => rows.where((row) => row.isPaid).length;
-  int get partialCount => rows.where((row) => row.isPartial).length;
-  int get unpaidCount => rows.where((row) => row.balance > 0).length;
-}
-
-class _InvoiceRow {
-  final String id;
-  final String uid;
-  final String name;
-  final String houseNo;
-  final String type;
-  final String status;
-  final String month;
-  final String demandId;
-  final String title;
-  final String description;
-  final num amount;
-  final num paidAmount;
-  final Object? createdAt;
-  final Object? dueDate;
-
-  _InvoiceRow({
-    required this.id,
-    required this.uid,
-    required this.name,
-    required this.houseNo,
-    required this.type,
-    required this.status,
-    required this.month,
-    required this.demandId,
-    required this.title,
-    required this.description,
-    required this.amount,
-    required this.paidAmount,
-    required this.createdAt,
-    required this.dueDate,
-  });
-
-  factory _InvoiceRow.fromDoc(String id, Map<String, dynamic> data) {
-    final rawType = data['type']?.toString() ?? '';
-    final demandId = data['demand_id']?.toString() ?? '';
-    final month = data['month']?.toString() ?? '';
-    final type =
-        rawType == 'DEMAND' || demandId.isNotEmpty ? 'DEMAND' : 'MAINTENANCE';
-    return _InvoiceRow(
-      id: id,
-      uid: data['uid']?.toString() ?? '',
-      name: data['name']?.toString() ?? '',
-      houseNo: data['house_no']?.toString() ?? '',
-      type: type,
-      status: data['status']?.toString() ?? 'UNPAID',
-      month: month,
-      demandId: demandId,
-      title: data['title']?.toString() ?? '',
-      description: data['description']?.toString() ?? '',
-      amount: (data['amount'] as num?) ?? 0,
-      paidAmount: (data['paid_amount'] as num?) ?? 0,
-      createdAt: data['created_at'],
-      dueDate: data['due_date'],
-    );
-  }
-
-  bool get isDemand => type == 'DEMAND';
-
-  String get groupKey {
-    if (isDemand && demandId.isNotEmpty) return 'demand:$demandId';
-    if (month.isNotEmpty) return 'month:$month';
-    return 'invoice:$id';
-  }
-
-  String get groupTitle {
-    if (isDemand) return title.ifBlank('Demand Due');
-    return monthLabel;
-  }
-
-  String get monthLabel {
-    if (month.isEmpty) return 'Monthly Maintenance';
-    return monthKeyLabel(month);
-  }
-
-  String get reportMonthKey {
-    if (month.isNotEmpty) return month;
-    final date = _timestampToDate(dueDate) ?? _timestampToDate(createdAt);
-    if (date == null) return '';
-    return '${date.year}-${date.month.toString().padLeft(2, '0')}';
-  }
-
-  static String monthKeyLabel(String monthKey) {
-    try {
-      return DateFormat('MMMM yyyy').format(DateTime.parse('$monthKey-01'));
-    } catch (_) {
-      return monthKey;
-    }
-  }
-
-  static DateTime? _timestampToDate(Object? value) {
-    if (value is Timestamp) return value.toDate();
-    return null;
-  }
-
-  num get balance {
-    final value = amount - paidAmount;
-    return value < 0 ? 0 : value;
-  }
-
-  bool get isPaid => balance <= 0 || status == 'PAID';
-  bool get isPartial => paidAmount > 0 && !isPaid;
-
-  String get sheetStatus {
-    if (isPaid) return 'PAID';
-    if (isPartial) return 'PARTIAL';
-    return 'UNPAID';
-  }
-
-  Color get statusColor {
-    if (isPaid) return AppColors.success;
-    if (isPartial) return AppColors.warning;
-    return AppColors.error;
-  }
-}
-
-extension _BlankString on String {
-  String ifBlank(String fallback) => trim().isEmpty ? fallback : this;
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 2),
+    child: Text(text, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
+  );
 }

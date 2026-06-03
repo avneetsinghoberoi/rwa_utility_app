@@ -55,3 +55,20 @@ functions/.env.*
 android/key.properties
 *.jks
 *.keystore
+
+# Firebase config — contains API keys, never commit
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+macos/Runner/GoogleService-Info.plist
+lib/firebase_options.dart
+
+# Cloud Functions dependencies
+functions/node_modules/
+functions/build/
+
+# iOS & macOS Pods (large, auto-generated)
+ios/Pods/
+macos/Pods/
+
+# VS Code
+.vscode/

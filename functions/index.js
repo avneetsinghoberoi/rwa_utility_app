@@ -3,6 +3,7 @@ const crypto     = require("crypto");
 const nodemailer = require("nodemailer");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { createObjectCsvStringifier } = require("csv-writer");
 
@@ -160,14 +161,16 @@ async function _generateInvoicesForMonth(db, targetMonthKey) {
 // ─────────────────────────────────────────────────────────────────────────────
 // SCHEDULED: runs automatically on the 1st of every month at 00:05 IST
 // ─────────────────────────────────────────────────────────────────────────────
-exports.generateMonthlyInvoices = onSchedule(
-  { schedule: "5 0 1 * *", timeZone: "Asia/Kolkata" },
-  async () => {
-    const db = admin.firestore();
-    const result = await _generateInvoicesForMonth(db, monthKey());
-    console.log("Scheduled invoice generation result:", result);
-  }
-);
+// ── DISABLED: automatic monthly invoice generation has been turned off. ──────
+// All dues are now created manually by the admin via the Generate Due screen.
+// exports.generateMonthlyInvoices = onSchedule(
+//   { schedule: "5 0 1 * *", timeZone: "Asia/Kolkata" },
+//   async () => {
+//     const db = admin.firestore();
+//     const result = await _generateInvoicesForMonth(db, monthKey());
+//     console.log("Scheduled invoice generation result:", result);
+//   }
+// );
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CALLABLE: admin can trigger manually from the app as a backup
@@ -842,10 +845,17 @@ function httpError(res, status, code, message) {
 /**
  * CREATE DEMAND DUE
  * POST /createDemandDueHttp
- * Body: { title, description, category, amountPerUnit, targetType, targetHouses[], dueDateMs }
+ * Body: { title, description, category, dueDateMs,
+ *         targetType, amountPerUnit, flatAmount, houseAmount, targetHouses[] }
+ *
+ * targetType:
+ *   "ALL"      – all residents, single amountPerUnit
+ *   "FLATS"    – only flat residents, amountPerUnit
+ *   "HOUSES"   – only independent-house residents, amountPerUnit
+ *   "SPLIT"    – all residents, flatAmount for flats, houseAmount for houses
+ *   "SPECIFIC" – selected houses, amountPerUnit
  *
  * Creates a demand_dues document and one invoice per targeted resident.
- * Idempotent per (title + month) to prevent accidental duplicates.
  */
 exports.createDemandDueHttp = onRequest({ cors: true }, async (req, res) => {
   if (req.method !== "POST") return httpError(res, 405, "METHOD_NOT_ALLOWED", "POST only");
@@ -860,44 +870,71 @@ exports.createDemandDueHttp = onRequest({ cors: true }, async (req, res) => {
     const adminUser   = await requireAdminFromAuthContext(db, authContext);
 
     // ── Validate inputs ────────────────────────────────────────────
-    const title       = String(body.title || "").trim();
-    const description = String(body.description || "").trim();
-    const category    = String(body.category || "Other").trim();
-    const amount      = Number(body.amountPerUnit);
-    const targetType  = String(body.targetType || "ALL"); // "ALL" | "SPECIFIC"
+    const title        = String(body.title || "").trim();
+    const description  = String(body.description || "").trim();
+    const category     = String(body.category || "Other").trim();
+    const targetType   = String(body.targetType || "ALL");
     const targetHouses = Array.isArray(body.targetHouses) ? body.targetHouses.map(String) : [];
-    const dueDateMs   = Number(body.dueDateMs);
+    const dueDateMs    = Number(body.dueDateMs);
 
-    if (!title)                        return httpError(res, 400, "INVALID_ARGUMENT", "title required");
-    if (!Number.isFinite(amount) || amount <= 0) return httpError(res, 400, "INVALID_ARGUMENT", "amountPerUnit must be > 0");
-    if (!Number.isFinite(dueDateMs))   return httpError(res, 400, "INVALID_ARGUMENT", "dueDateMs required");
+    // Amount fields — SPLIT uses flatAmount + houseAmount; others use amountPerUnit
+    const amountPerUnit = Number(body.amountPerUnit || 0);
+    const flatAmount    = Number(body.flatAmount    || 0);
+    const houseAmount   = Number(body.houseAmount   || 0);
+
+    if (!title)                      return httpError(res, 400, "INVALID_ARGUMENT", "title required");
+    if (!Number.isFinite(dueDateMs)) return httpError(res, 400, "INVALID_ARGUMENT", "dueDateMs required");
+
+    if (targetType === "SPLIT") {
+      if (flatAmount  <= 0) return httpError(res, 400, "INVALID_ARGUMENT", "flatAmount must be > 0 for SPLIT");
+      if (houseAmount <= 0) return httpError(res, 400, "INVALID_ARGUMENT", "houseAmount must be > 0 for SPLIT");
+    } else {
+      if (amountPerUnit <= 0) return httpError(res, 400, "INVALID_ARGUMENT", "amountPerUnit must be > 0");
+    }
     if (targetType === "SPECIFIC" && targetHouses.length === 0)
       return httpError(res, 400, "INVALID_ARGUMENT", "targetHouses required when targetType=SPECIFIC");
 
     const dueDate = admin.firestore.Timestamp.fromMillis(dueDateMs);
 
-    // ── Fetch target residents ─────────────────────────────────────
-    let usersQuery = db.collection("users").where("role", "==", "user");
-    const usersSnap = await usersQuery.get();
+    // ── Fetch all residents ────────────────────────────────────────
+    const usersSnap = await db.collection("users").where("role", "==", "user").get();
 
-    const targetDocs = targetType === "ALL"
-      ? usersSnap.docs
-      : usersSnap.docs.filter(d => targetHouses.includes(String(d.data().house_no || "")));
+    // Filter by targetType
+    let targetDocs = usersSnap.docs;
+    if (targetType === "FLATS") {
+      targetDocs = targetDocs.filter(d => (d.data().property_type || "flat") === "flat");
+    } else if (targetType === "HOUSES") {
+      targetDocs = targetDocs.filter(d => d.data().property_type === "house");
+    } else if (targetType === "SPECIFIC") {
+      targetDocs = targetDocs.filter(d => targetHouses.includes(String(d.data().house_no || "")));
+    }
+    // ALL and SPLIT include every resident
 
     if (targetDocs.length === 0)
       return httpError(res, 400, "NOT_FOUND", "No matching residents found");
 
+    // ── Resolve per-resident invoice amount ────────────────────────
+    const resolveAmount = (u) => {
+      if (targetType === "SPLIT") {
+        return (u.property_type || "flat") === "house" ? houseAmount : flatAmount;
+      }
+      return amountPerUnit;
+    };
+
     // ── Create demand_dues document ────────────────────────────────
-    const demandRef = db.collection("demand_dues").doc();
+    const demandRef  = db.collection("demand_dues").doc();
     const demandData = {
       title,
       description,
       category,
-      amount_per_unit: amount,
-      target_type: targetType,
-      target_houses: targetType === "SPECIFIC" ? targetHouses : [],
-      due_date: dueDate,
-      status: "ACTIVE",
+      target_type:    targetType,
+      target_houses:  targetType === "SPECIFIC" ? targetHouses : [],
+      // Store amounts for display
+      amount_per_unit: targetType === "SPLIT" ? null : amountPerUnit,
+      flat_amount:     targetType === "SPLIT" ? flatAmount  : null,
+      house_amount:    targetType === "SPLIT" ? houseAmount : null,
+      due_date:   dueDate,
+      status:     "ACTIVE",
       invoices_created: targetDocs.length,
       created_at: admin.firestore.FieldValue.serverTimestamp(),
       created_by: adminUser.authUid,
@@ -912,24 +949,26 @@ exports.createDemandDueHttp = onRequest({ cors: true }, async (req, res) => {
     batchCount++;
 
     for (const userDoc of targetDocs) {
-      const u = userDoc.data();
+      const u      = userDoc.data();
+      const amount = resolveAmount(u);
       const invRef = db.collection("invoices").doc();
       batch.set(invRef, {
-        type:        "DEMAND",
-        uid:         userDoc.id,
-        house_no:    String(u.house_no || ""),
-        name:        String(u.name || ""),
-        email:       String(u.email || ""),
+        type:          "DEMAND",
+        uid:           userDoc.id,
+        house_no:      String(u.house_no || ""),
+        name:          String(u.name || ""),
+        email:         String(u.email || ""),
+        property_type: String(u.property_type || "flat"),
         title,
         description,
         category,
-        demand_id:   demandRef.id,
+        demand_id:     demandRef.id,
         amount,
-        paid_amount: 0,
-        status:      "UNPAID",
-        due_date:    dueDate,
-        created_at:  admin.firestore.FieldValue.serverTimestamp(),
-        created_by:  adminUser.authUid,
+        paid_amount:   0,
+        status:        "UNPAID",
+        due_date:      dueDate,
+        created_at:    admin.firestore.FieldValue.serverTimestamp(),
+        created_by:    adminUser.authUid,
       });
       batchCount++;
 
@@ -942,28 +981,28 @@ exports.createDemandDueHttp = onRequest({ cors: true }, async (req, res) => {
 
     if (batchCount > 0) await batch.commit();
 
-    console.log(`[createDemandDueHttp] Created demand due "${title}" with ${targetDocs.length} invoices. demandId=${demandRef.id}`);
+    console.log(`[createDemandDueHttp] "${title}" targetType=${targetType} invoices=${targetDocs.length} demandId=${demandRef.id}`);
 
-    // ── Send FCM to targeted residents (non-fatal) ─────────────────────────
+    // ── Send FCM to targeted residents (non-fatal) ─────────────────
     try {
       const targetUids = targetDocs.map((d) => d.id);
       const tokens = await getFcmTokensForUids(db, targetUids);
       const dueDateStr = dueDate.toDate().toLocaleDateString("en-IN");
+      const amtLabel = targetType === "SPLIT"
+        ? `₹${flatAmount} (Flat) / ₹${houseAmount} (House)`
+        : `₹${amountPerUnit}`;
       await sendFcmMulticast(
         tokens,
         `💸 New Due: ${title}`,
-        `Amount: ₹${amount}  |  Due by ${dueDateStr}`,
+        `Amount: ${amtLabel}  |  Due by ${dueDateStr}`,
         { type: "DEMAND_DUE", demandId: demandRef.id }
       );
     } catch (fcmErr) {
       console.error("[createDemandDueHttp] FCM error (non-fatal):", fcmErr.message);
     }
 
-    res.status(200).json({
-      ok: true,
-      demandId: demandRef.id,
-      invoicesCreated: targetDocs.length,
-    });
+    res.status(200).json({ ok: true, demandId: demandRef.id, invoicesCreated: targetDocs.length });
+
   } catch (error) {
     if (error instanceof HttpsError)
       return res.status(error.httpErrorCode.status).json({ error: { status: error.code.toUpperCase().replace(/-/g,"_"), message: error.message } });
@@ -1316,10 +1355,11 @@ exports.createResidentHttp = onRequest({ cors: true }, async (req, res) => {
     const authContext = await resolveAuthContext({ auth: null, data: { authToken: token } });
     await requireAdminFromAuthContext(db, authContext);
 
-    const name    = String(body.name    || "").trim();
-    const email   = String(body.email   || "").trim().toLowerCase();
-    const phone   = String(body.phone   || "").trim();
-    const houseNo = String(body.houseNo || "").trim();
+    const name         = String(body.name         || "").trim();
+    const email        = String(body.email        || "").trim().toLowerCase();
+    const phone        = String(body.phone        || "").trim();
+    const houseNo      = String(body.houseNo      || "").trim();
+    const propertyType = String(body.propertyType || "flat").trim(); // 'flat' | 'house'
 
     if (!name)    return httpError(res, 400, "INVALID_ARGUMENT", "name required");
     if (!email)   return httpError(res, 400, "INVALID_ARGUMENT", "email required");
@@ -1346,13 +1386,14 @@ exports.createResidentHttp = onRequest({ cors: true }, async (req, res) => {
       name,
       email,
       phone,
-      house_no: houseNo,
-      floor: "",
-      dues: 0,
-      role: "user",
-      qr_payload: houseNo,
-      created_at: admin.firestore.FieldValue.serverTimestamp(),
-      last_due_update: "",
+      house_no:      houseNo,
+      property_type: propertyType, // 'flat' or 'house'
+      floor:         "",
+      dues:          0,
+      role:          "user",
+      qr_payload:    houseNo,
+      created_at:    admin.firestore.FieldValue.serverTimestamp(),
+      last_due_update:   "",
       last_payment_date: "",
     });
 
@@ -1465,3 +1506,155 @@ exports.closeDemandDueHttp = onRequest({ cors: true }, async (req, res) => {
 exports.onAddFlatMemberRequest = accountSharing.onAddFlatMemberRequest;
 exports.onRemoveFlatMemberRequest = accountSharing.onRemoveFlatMemberRequest;
 exports.runMigration = accountSharing.runMigration;
+
+// =============================================================================
+// FIRESTORE TRIGGERS — PUSH NOTIFICATIONS
+// =============================================================================
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. NEW POLL CREATED → notify all residents
+// ─────────────────────────────────────────────────────────────────────────────
+exports.onPollCreated = onDocumentCreated("polls/{pollId}", async (event) => {
+  try {
+    const db     = admin.firestore();
+    const data   = event.data?.data();
+    if (!data) return;
+
+    const title   = String(data.title        || "New Community Poll");
+    const desc    = String(data.description  || "");
+    const options = Array.isArray(data.options)
+      ? data.options.map(o => String(o.text || "")).filter(Boolean).join("  ·  ")
+      : "";
+
+    const tokens = await getAllResidentFcmTokens(db);
+    if (tokens.length === 0) return;
+
+    await sendFcmMulticast(
+      tokens,
+      `🗳️ New Poll: ${title}`,
+      desc || options || "Cast your vote now!",
+      { type: "NEW_POLL", pollId: event.params.pollId }
+    );
+
+    console.log(`[onPollCreated] Notified ${tokens.length} residents — poll: "${title}"`);
+  } catch (err) {
+    console.error("[onPollCreated] Error:", err.message);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. POLL CLOSED → notify all residents that results are in
+// ─────────────────────────────────────────────────────────────────────────────
+exports.onPollUpdated = onDocumentUpdated("polls/{pollId}", async (event) => {
+  try {
+    const before = event.data?.before?.data();
+    const after  = event.data?.after?.data();
+    if (!before || !after) return;
+
+    // Only fire when status changes from 'active' → 'closed'
+    if (before.status !== "active" || after.status !== "closed") return;
+
+    const db    = admin.firestore();
+    const title = String(after.title || "A poll");
+
+    const tokens = await getAllResidentFcmTokens(db);
+    if (tokens.length === 0) return;
+
+    await sendFcmMulticast(
+      tokens,
+      `📊 Poll Closed: ${title}`,
+      "Voting is over — check the results!",
+      { type: "POLL_CLOSED", pollId: event.params.pollId }
+    );
+
+    console.log(`[onPollUpdated] Poll closed notification sent — "${title}"`);
+  } catch (err) {
+    console.error("[onPollUpdated] Error:", err.message);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. VISITOR LOGGED AT GATE → notify the resident of the visited flat
+// ─────────────────────────────────────────────────────────────────────────────
+exports.onVisitorLogged = onDocumentCreated("visitor_logs/{logId}", async (event) => {
+  try {
+    const db   = admin.firestore();
+    const data = event.data?.data();
+    if (!data) return;
+
+    const apartment   = String(data.apartment    || "");
+    const visitorName = String(data.visitor_name || "Someone");
+    const vehicle     = String(data.vehicle_no   || "");
+    const entryType   = String(data.entry_type   || "manual");
+
+    if (!apartment) return;
+
+    // Find residents who live in this apartment
+    const snap = await db.collection("users")
+      .where("house_no", "==", apartment)
+      .where("role", "==", "user")
+      .get();
+
+    if (snap.empty) return;
+
+    const uids   = snap.docs.map(d => d.id);
+    const tokens = await getFcmTokensForUids(db, uids);
+    if (tokens.length === 0) return;
+
+    const bodyParts = [`${visitorName} has arrived at your flat`];
+    if (vehicle) bodyParts.push(`· Vehicle: ${vehicle}`);
+    const via = entryType === "qr_scan" ? " (QR verified)" : "";
+
+    await sendFcmMulticast(
+      tokens,
+      `🚪 Visitor at ${apartment}${via}`,
+      bodyParts.join("  "),
+      { type: "VISITOR_ARRIVED", logId: event.params.logId, apartment }
+    );
+
+    console.log(`[onVisitorLogged] Notified residents of flat ${apartment} — visitor: "${visitorName}"`);
+  } catch (err) {
+    console.error("[onVisitorLogged] Error:", err.message);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. ISSUE FILED BY RESIDENT → notify all admins
+// ─────────────────────────────────────────────────────────────────────────────
+exports.onIssueCreated = onDocumentCreated("issues/{issueId}", async (event) => {
+  try {
+    const db   = admin.firestore();
+    const data = event.data?.data();
+    if (!data) return;
+
+    const issueTitle = String(data.title    || data.subject  || "New issue");
+    const houseNo    = String(data.house_no || data.flat_no  || "");
+    const category   = String(data.category || data.type     || "");
+
+    // Find all admin FCM tokens
+    const adminSnap = await db.collection("users")
+      .where("role", "==", "admin")
+      .get();
+
+    if (adminSnap.empty) return;
+
+    const adminUids  = adminSnap.docs.map(d => d.id);
+    const tokens     = await getFcmTokensForUids(db, adminUids);
+    if (tokens.length === 0) return;
+
+    const bodyParts = [];
+    if (houseNo)  bodyParts.push(`Flat: ${houseNo}`);
+    if (category) bodyParts.push(`Category: ${category}`);
+
+    await sendFcmMulticast(
+      tokens,
+      `⚠️ New Issue: ${issueTitle}`,
+      bodyParts.length > 0 ? bodyParts.join("  ·  ") : "A resident has raised a new issue.",
+      { type: "NEW_ISSUE", issueId: event.params.issueId }
+    );
+
+    console.log(`[onIssueCreated] Notified admins — issue: "${issueTitle}" from flat: ${houseNo}`);
+  } catch (err) {
+    console.error("[onIssueCreated] Error:", err.message);
+  }
+});

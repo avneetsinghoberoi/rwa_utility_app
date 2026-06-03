@@ -1140,18 +1140,29 @@ class _UserPayScreenState extends State<UserPayScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
+                                    // Due title — most important info
+                                    if ((r['purpose'] ?? '').toString().isNotEmpty)
+                                      Text(
+                                        r['purpose'].toString(),
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 13,
+                                            color: AppColors.textPrimary),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     Text(
                                       '₹${r["amount"] ?? 0}  •  ${r["status"] ?? "VERIFIED"}',
                                       style: const TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 14,
-                                          color: AppColors.textPrimary),
+                                          fontWeight: FontWeight.w500,
+                                          fontSize: 13,
+                                          color: AppColors.textSecondary),
                                     ),
                                     Text(
                                       'Txn: ${r["utr"] ?? "-"}',
                                       style: const TextStyle(
-                                          fontSize: 12,
-                                          color: AppColors.textSecondary),
+                                          fontSize: 11,
+                                          color: AppColors.textHint),
                                     ),
                                   ],
                                 ),

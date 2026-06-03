@@ -171,10 +171,28 @@ class ReceiptPdfService {
                       ),
                     ],
                   ),
-                  pw.SizedBox(height: 14),
+                  pw.SizedBox(height: 10),
+                  // Due title — the most important identifier on the receipt
+                  pw.Text(
+                    purpose,
+                    style: pw.TextStyle(
+                      fontSize: 15,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.white,
+                    ),
+                  ),
+                  if (monthLabel.isNotEmpty) ...[
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      monthLabel,
+                      style: pw.TextStyle(
+                          fontSize: 11, color: const PdfColor(1, 1, 1, 0.75)),
+                    ),
+                  ],
+                  pw.SizedBox(height: 8),
                   pw.Text('Receipt ID: $receiptId',
                       style: pw.TextStyle(
-                          fontSize: 10, color: const PdfColor(1, 1, 1, 0.7))),
+                          fontSize: 10, color: const PdfColor(1, 1, 1, 0.6))),
                 ],
               ),
             ),
@@ -185,46 +203,47 @@ class ReceiptPdfService {
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  // ── Purpose section ────────────────────────────
+                  // ── Due type + description section ─────────────
                   pw.Container(
                     width: double.infinity,
-                    padding: const pw.EdgeInsets.all(16),
+                    padding: const pw.EdgeInsets.all(14),
                     decoration: pw.BoxDecoration(
                       color: lightBg,
                       borderRadius:
                           const pw.BorderRadius.all(pw.Radius.circular(10)),
                     ),
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    child: pw.Row(
                       children: [
-                        pw.Text(
-                          isDemand
-                              ? 'Special Demand Due'
-                              : 'Monthly Maintenance',
-                          style: pw.TextStyle(
-                            fontSize: 10,
+                        pw.Container(
+                          width: 4,
+                          height: description.isNotEmpty ? 40 : 20,
+                          decoration: pw.BoxDecoration(
                             color: headerColor,
-                            fontWeight: pw.FontWeight.bold,
+                            borderRadius: const pw.BorderRadius.all(
+                                pw.Radius.circular(4)),
                           ),
                         ),
-                        pw.SizedBox(height: 4),
-                        pw.Text(
-                          purpose,
-                          style: pw.TextStyle(
-                              fontSize: 15, fontWeight: pw.FontWeight.bold),
+                        pw.SizedBox(width: 12),
+                        pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text(
+                              isDemand ? 'Special Demand Due' : 'Monthly Maintenance',
+                              style: pw.TextStyle(
+                                  fontSize: 10,
+                                  color: headerColor,
+                                  fontWeight: pw.FontWeight.bold),
+                            ),
+                            if (description.isNotEmpty) ...[
+                              pw.SizedBox(height: 4),
+                              pw.Text(
+                                description,
+                                style: const pw.TextStyle(
+                                    fontSize: 11, color: PdfColors.grey700),
+                              ),
+                            ],
+                          ],
                         ),
-                        if (monthLabel.isNotEmpty) ...[
-                          pw.SizedBox(height: 2),
-                          pw.Text(monthLabel,
-                              style: const pw.TextStyle(
-                                  fontSize: 11, color: PdfColors.grey700)),
-                        ],
-                        if (description.isNotEmpty) ...[
-                          pw.SizedBox(height: 6),
-                          pw.Text(description,
-                              style: const pw.TextStyle(
-                                  fontSize: 11, color: PdfColors.grey700)),
-                        ],
                       ],
                     ),
                   ),

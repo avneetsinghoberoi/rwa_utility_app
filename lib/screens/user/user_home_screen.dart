@@ -524,7 +524,11 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                                 ? DateFormat('MMMM yyyy')
                                     .format(DateTime.parse('$month-01'))
                                 : ''),
-                        invoiceTitle: title,
+                        invoiceTitle: isDemand
+                            ? title
+                            : (month.isNotEmpty
+                                ? 'Monthly Maintenance — ${DateFormat('MMMM yyyy').format(DateTime.parse('$month-01'))}'
+                                : 'Monthly Maintenance'),
                         invoiceDescription: desc,
                         invoiceType: type,
                       ),
