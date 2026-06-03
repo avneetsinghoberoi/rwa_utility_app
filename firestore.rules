@@ -421,5 +421,40 @@ service cloud.firestore {
       }
     }
 
+    // ============================================================================
+    // VISITOR LOGS COLLECTION
+    // ============================================================================
+
+    function isGuard(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.role == 'guard';
+    }
+
+    match /visitor_logs/{logId} {
+      // Admin can read all logs
+      allow read: if request.auth.uid != null &&
+                     isAdmin(request.auth.uid);
+
+      // Guard can read all logs (to show today's log tab)
+      allow read: if request.auth.uid != null &&
+                     isGuard(request.auth.uid);
+
+      // Residents can read logs for their own apartment
+      allow read: if request.auth.uid != null &&
+                     isResidentUser(request.auth.uid) &&
+                     resource.data.apartment == getUserHouseNo(request.auth.uid);
+
+      // Only guards can create visitor log entries
+      allow create: if request.auth.uid != null &&
+                       isGuard(request.auth.uid) &&
+                       request.resource.data.logged_by_uid == request.auth.uid;
+
+      // Logs are immutable once created
+      allow update: if false;
+
+      // Only admin can delete logs
+      allow delete: if request.auth.uid != null &&
+                       isAdmin(request.auth.uid);
+    }
+
   }
 }

@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:gate_basic/screens/user/dashboard.dart';
 import 'package:gate_basic/screens/admin/admin_dashboard.dart';
+import 'package:gate_basic/screens/guard/guard_dashboard.dart';
 import 'package:gate_basic/theme/app_theme.dart';
 import 'dart:ui';
 
@@ -14,7 +15,7 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin {
-  bool isResident = true;
+  String _selectedRole = 'resident'; // 'resident' | 'admin'
   bool _isLoading = false;
   bool _obscurePassword = true;
 
@@ -84,6 +85,11 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const AdminDashboard()),
+        );
+      } else if (role == 'guard') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const GuardDashboard()),
         );
       } else {
         Navigator.pushReplacement(
@@ -463,6 +469,40 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
 
                                 // Login Button
                                 _buildEnhancedLoginButton(),
+                                const SizedBox(height: 12),
+
+                                // Guard login link
+                                Center(
+                                  child: GestureDetector(
+                                    onTap: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                          builder: (_) =>
+                                              const _GuardLoginScreen()),
+                                    ),
+                                    child: RichText(
+                                      text: TextSpan(
+                                        text: 'Are you a guard?  ',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: AppColors.textSecondary,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                        children: const [
+                                          TextSpan(
+                                            text: 'Login here',
+                                            style: TextStyle(
+                                              color: AppColors.primary,
+                                              fontWeight: FontWeight.w700,
+                                              decoration:
+                                                  TextDecoration.underline,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
                                 const SizedBox(height: 16),
                               ],
                             ),
@@ -558,18 +598,18 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
       ),
       child: Row(
         children: [
-          _buildRoleOption('Resident', Icons.home_rounded, true),
-          _buildRoleOption('Admin', Icons.admin_panel_settings_rounded, false),
+          _buildRoleOption('Resident', Icons.home_rounded, 'resident'),
+          _buildRoleOption('Admin', Icons.admin_panel_settings_rounded, 'admin'),
         ],
       ),
     );
   }
 
-  Widget _buildRoleOption(String label, IconData icon, bool isResident) {
-    final selected = (isResident && this.isResident) || (!isResident && !this.isResident);
+  Widget _buildRoleOption(String label, IconData icon, String role) {
+    final selected = _selectedRole == role;
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => this.isResident = isResident),
+        onTap: () => setState(() => _selectedRole = role),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
@@ -660,7 +700,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                     ),
                     const SizedBox(width: 10),
                     Text(
-                      'Login as ${isResident ? 'Resident' : 'Admin'}',
+                      'Login as ${_selectedRole == 'admin' ? 'Admin' : 'Resident'}',
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
@@ -709,4 +749,236 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
       ),
     );
   }
+}
+
+// ── Guard Login Screen ────────────────────────────────────────────────────────
+class _GuardLoginScreen extends StatefulWidget {
+  const _GuardLoginScreen();
+
+  @override
+  State<_GuardLoginScreen> createState() => _GuardLoginScreenState();
+}
+
+class _GuardLoginScreenState extends State<_GuardLoginScreen> {
+  final _emailCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
+  bool _obscure = true;
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    _passwordCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _login() async {
+    if (_emailCtrl.text.trim().isEmpty || _passwordCtrl.text.trim().isEmpty) {
+      _showError('Please enter your email and password.');
+      return;
+    }
+    setState(() => _loading = true);
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: _emailCtrl.text.trim(),
+        password: _passwordCtrl.text.trim(),
+      );
+
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .where('email', isEqualTo: _emailCtrl.text.trim())
+          .limit(1)
+          .get();
+
+      if (snap.docs.isEmpty) {
+        _showError('Account not found.');
+        await FirebaseAuth.instance.signOut();
+        return;
+      }
+
+      final role = snap.docs.first['role']?.toString() ?? '';
+      if (role != 'guard') {
+        _showError('This login is only for guard accounts.');
+        await FirebaseAuth.instance.signOut();
+        return;
+      }
+
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const GuardDashboard()),
+        (route) => false,
+      );
+    } on FirebaseAuthException catch (e) {
+      _showError(e.message ?? 'Login failed. Please try again.');
+    } catch (_) {
+      _showError('Something went wrong. Please try again.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _showError(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Row(children: [
+        const Icon(Icons.error_outline, color: Colors.white, size: 18),
+        const SizedBox(width: 8),
+        Expanded(child: Text(msg)),
+      ]),
+      backgroundColor: AppColors.error,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded,
+              color: AppColors.textPrimary),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Icon
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: AppColors.primaryLight,
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: const Icon(Icons.security_rounded,
+                    color: AppColors.primary, size: 34),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Guard Login',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                  letterSpacing: -0.5,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Sign in with your guard credentials',
+                style: TextStyle(
+                    fontSize: 14, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 36),
+
+              // Email
+              const Text('Email',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                      color: AppColors.textPrimary)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _emailCtrl,
+                keyboardType: TextInputType.emailAddress,
+                decoration: _deco('Enter your email',
+                    Icons.email_outlined),
+              ),
+              const SizedBox(height: 16),
+
+              // Password
+              const Text('Password',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                      color: AppColors.textPrimary)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _passwordCtrl,
+                obscureText: _obscure,
+                decoration: _deco(
+                  'Enter your password',
+                  Icons.lock_outline_rounded,
+                  suffix: GestureDetector(
+                    onTap: () => setState(() => _obscure = !_obscure),
+                    child: Icon(
+                      _obscure
+                          ? Icons.visibility_off_rounded
+                          : Icons.visibility_rounded,
+                      color: AppColors.textSecondary,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 36),
+
+              // Login button
+              SizedBox(
+                width: double.infinity,
+                height: 54,
+                child: ElevatedButton.icon(
+                  onPressed: _loading ? null : _login,
+                  icon: _loading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2))
+                      : const Icon(Icons.login_rounded, size: 20),
+                  label: Text(
+                    _loading ? 'Signing in...' : 'Login as Guard',
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  InputDecoration _deco(String hint, IconData icon, {Widget? suffix}) =>
+      InputDecoration(
+        hintText: hint,
+        hintStyle:
+            const TextStyle(color: AppColors.textHint, fontSize: 14),
+        prefixIcon:
+            Icon(icon, color: AppColors.textSecondary, size: 20),
+        suffixIcon: suffix,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide:
+              const BorderSide(color: AppColors.primary, width: 1.5),
+        ),
+      );
 }

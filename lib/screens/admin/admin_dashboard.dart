@@ -11,6 +11,7 @@ import 'admin_issues.dart';
 import 'admin_expense.dart';
 import 'admin_notices.dart';
 import 'admin_polls_screen.dart';
+import 'admin_visitor_logs_screen.dart';
 import 'admin_reports_screen.dart';
 import '../login/login_screen.dart';
 
@@ -87,6 +88,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
       icon: Icons.how_to_vote_outlined,
       selectedIcon: Icons.how_to_vote_rounded,
       screen: AdminPollsScreen(),
+    ),
+    _NavItem(
+      label: 'Visitors',
+      icon: Icons.badge_outlined,
+      selectedIcon: Icons.badge_rounded,
+      screen: AdminVisitorLogsScreen(),
     ),
     _NavItem(
       label: 'Reports',

@@ -10,6 +10,7 @@ import 'services/notification_service.dart';
 import 'screens/login/login_screen.dart';
 import 'screens/admin/admin_dashboard.dart';
 import 'screens/user/dashboard.dart';
+import 'screens/guard/guard_dashboard.dart';
 import 'screens/splash/splash_screen.dart';
 
 Future<void> main() async {
@@ -78,6 +79,8 @@ class _MyAppState extends State<MyApp> {
 
         if (role == 'admin') {
           return const AdminDashboard();
+        } else if (role == 'guard') {
+          return const GuardDashboard();
         } else {
           // Include the Firestore document ID so invoice queries use the correct UID
           final userData = {
